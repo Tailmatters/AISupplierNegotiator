@@ -2,13 +2,15 @@ import {
   User, InsertUser, Supplier, InsertSupplier, 
   Negotiation, InsertNegotiation, Message, InsertMessage,
   Invitation, InsertInvitation, Proposal, InsertProposal,
-  users, suppliers, negotiations, messages, invitations, proposals
+  ContractTemplate, InsertContractTemplate, Contract, InsertContract,
+  users, suppliers, negotiations, messages, invitations, proposals,
+  contractTemplates, contracts
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, not } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import pkg from "pg";
 const { Pool } = pkg;
@@ -57,6 +59,21 @@ export interface IStorage {
   createProposal(proposal: InsertProposal): Promise<Proposal>;
   updateProposal(id: number, proposal: Partial<Proposal>): Promise<Proposal | undefined>;
   
+  // Contract Template operations
+  getContractTemplate(id: number): Promise<ContractTemplate | undefined>;
+  getContractTemplatesByCategory(category: string): Promise<ContractTemplate[]>;
+  getContractTemplatesForUser(userId: number): Promise<ContractTemplate[]>;
+  getDefaultTemplateForCategory(category: string): Promise<ContractTemplate | undefined>;
+  createContractTemplate(template: InsertContractTemplate): Promise<ContractTemplate>;
+  updateContractTemplate(id: number, template: Partial<ContractTemplate>): Promise<ContractTemplate | undefined>;
+  
+  // Contract operations
+  getContract(id: number): Promise<Contract | undefined>;
+  getContractsByNegotiation(negotiationId: number): Promise<Contract[]>;
+  getContractsBySupplier(supplierId: number): Promise<Contract[]>;
+  createContract(contract: InsertContract): Promise<Contract>;
+  updateContract(id: number, contract: Partial<Contract>): Promise<Contract | undefined>;
+  
   // Session store
   sessionStore: any;
 }
@@ -68,6 +85,8 @@ export class MemStorage implements IStorage {
   private messages: Map<number, Message>;
   private invitations: Map<number, Invitation>;
   private proposals: Map<number, Proposal>;
+  private contractTemplates: Map<number, ContractTemplate>;
+  private contracts: Map<number, Contract>;
   
   sessionStore: any;
   
@@ -78,6 +97,8 @@ export class MemStorage implements IStorage {
   private messageIdCounter: number;
   private invitationIdCounter: number;
   private proposalIdCounter: number;
+  private contractTemplateIdCounter: number;
+  private contractIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -86,6 +107,8 @@ export class MemStorage implements IStorage {
     this.messages = new Map();
     this.invitations = new Map();
     this.proposals = new Map();
+    this.contractTemplates = new Map();
+    this.contracts = new Map();
     
     this.userIdCounter = 1;
     this.supplierIdCounter = 1;
@@ -93,6 +116,8 @@ export class MemStorage implements IStorage {
     this.messageIdCounter = 1;
     this.invitationIdCounter = 1;
     this.proposalIdCounter = 1;
+    this.contractTemplateIdCounter = 1;
+    this.contractIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -323,6 +348,130 @@ export class MemStorage implements IStorage {
     const updatedProposal = { ...proposal, ...proposalUpdate };
     this.proposals.set(id, updatedProposal);
     return updatedProposal;
+  }
+  
+  // Contract Template operations
+  async getContractTemplate(id: number): Promise<ContractTemplate | undefined> {
+    return this.contractTemplates.get(id);
+  }
+  
+  async getContractTemplatesByCategory(category: string): Promise<ContractTemplate[]> {
+    return Array.from(this.contractTemplates.values()).filter(
+      (template) => template.category === category
+    );
+  }
+  
+  async getContractTemplatesForUser(userId: number): Promise<ContractTemplate[]> {
+    return Array.from(this.contractTemplates.values()).filter(
+      (template) => template.createdBy === userId
+    );
+  }
+  
+  async getDefaultTemplateForCategory(category: string): Promise<ContractTemplate | undefined> {
+    return Array.from(this.contractTemplates.values()).find(
+      (template) => template.category === category && template.isDefault === true
+    );
+  }
+  
+  async createContractTemplate(insertTemplate: InsertContractTemplate): Promise<ContractTemplate> {
+    const id = this.contractTemplateIdCounter++;
+    const now = new Date();
+    const template: ContractTemplate = {
+      id,
+      name: insertTemplate.name,
+      category: insertTemplate.category,
+      filePath: insertTemplate.filePath,
+      fileName: insertTemplate.fileName,
+      fileSize: insertTemplate.fileSize,
+      createdBy: insertTemplate.createdBy,
+      createdAt: now,
+      description: insertTemplate.description || null,
+      isDefault: insertTemplate.isDefault || false,
+      status: insertTemplate.status || "active",
+      metadata: insertTemplate.metadata || null
+    };
+    
+    // If this is a default template, update any existing default templates for this category
+    if (template.isDefault) {
+      const existingTemplates = await this.getContractTemplatesByCategory(template.category);
+      for (const existingTemplate of existingTemplates) {
+        if (existingTemplate.isDefault && existingTemplate.id !== template.id) {
+          await this.updateContractTemplate(existingTemplate.id, { isDefault: false });
+        }
+      }
+    }
+    
+    this.contractTemplates.set(id, template);
+    return template;
+  }
+  
+  async updateContractTemplate(id: number, templateUpdate: Partial<ContractTemplate>): Promise<ContractTemplate | undefined> {
+    const template = this.contractTemplates.get(id);
+    if (!template) return undefined;
+    
+    const updatedTemplate = { ...template, ...templateUpdate };
+    
+    // If this is being set as a default template, update any existing default templates for this category
+    if (templateUpdate.isDefault === true) {
+      const existingTemplates = await this.getContractTemplatesByCategory(template.category);
+      for (const existingTemplate of existingTemplates) {
+        if (existingTemplate.isDefault && existingTemplate.id !== id) {
+          existingTemplate.isDefault = false;
+          this.contractTemplates.set(existingTemplate.id, existingTemplate);
+        }
+      }
+    }
+    
+    this.contractTemplates.set(id, updatedTemplate);
+    return updatedTemplate;
+  }
+  
+  // Contract operations
+  async getContract(id: number): Promise<Contract | undefined> {
+    return this.contracts.get(id);
+  }
+  
+  async getContractsByNegotiation(negotiationId: number): Promise<Contract[]> {
+    return Array.from(this.contracts.values()).filter(
+      (contract) => contract.negotiationId === negotiationId
+    );
+  }
+  
+  async getContractsBySupplier(supplierId: number): Promise<Contract[]> {
+    return Array.from(this.contracts.values()).filter(
+      (contract) => contract.supplierId === supplierId
+    );
+  }
+  
+  async createContract(insertContract: InsertContract): Promise<Contract> {
+    const id = this.contractIdCounter++;
+    const now = new Date();
+    const contract: Contract = {
+      id,
+      negotiationId: insertContract.negotiationId,
+      supplierId: insertContract.supplierId,
+      filePath: insertContract.filePath,
+      fileName: insertContract.fileName,
+      proposalId: insertContract.proposalId || null,
+      templateId: insertContract.templateId || null,
+      status: insertContract.status || "draft",
+      generatedAt: now,
+      approvedAt: null,
+      signedAt: null,
+      terms: insertContract.terms || null,
+      metadata: insertContract.metadata || null
+    };
+    this.contracts.set(id, contract);
+    return contract;
+  }
+  
+  async updateContract(id: number, contractUpdate: Partial<Contract>): Promise<Contract | undefined> {
+    const contract = this.contracts.get(id);
+    if (!contract) return undefined;
+    
+    const updatedContract = { ...contract, ...contractUpdate };
+    this.contracts.set(id, updatedContract);
+    return updatedContract;
   }
   
   // Initialize sample data
@@ -576,6 +725,123 @@ export class DatabaseStorage implements IStorage {
       .where(eq(proposals.id, id))
       .returning();
     return updatedProposal;
+  }
+  
+  // Contract Template operations
+  async getContractTemplate(id: number): Promise<ContractTemplate | undefined> {
+    const [template] = await db.select().from(contractTemplates).where(eq(contractTemplates.id, id));
+    return template;
+  }
+  
+  async getContractTemplatesByCategory(category: string): Promise<ContractTemplate[]> {
+    return db
+      .select()
+      .from(contractTemplates)
+      .where(eq(contractTemplates.category, category));
+  }
+  
+  async getContractTemplatesForUser(userId: number): Promise<ContractTemplate[]> {
+    return db
+      .select()
+      .from(contractTemplates)
+      .where(eq(contractTemplates.createdBy, userId));
+  }
+  
+  async getDefaultTemplateForCategory(category: string): Promise<ContractTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(contractTemplates)
+      .where(and(
+        eq(contractTemplates.category, category),
+        eq(contractTemplates.isDefault, true)
+      ));
+    return template;
+  }
+  
+  async createContractTemplate(insertTemplate: InsertContractTemplate): Promise<ContractTemplate> {
+    // If this is a default template, update any existing default templates for this category
+    if (insertTemplate.isDefault) {
+      await db
+        .update(contractTemplates)
+        .set({ isDefault: false })
+        .where(and(
+          eq(contractTemplates.category, insertTemplate.category),
+          eq(contractTemplates.isDefault, true)
+        ));
+    }
+    
+    const [template] = await db.insert(contractTemplates).values(insertTemplate).returning();
+    return template;
+  }
+  
+  async updateContractTemplate(id: number, templateUpdate: Partial<ContractTemplate>): Promise<ContractTemplate | undefined> {
+    // If this is being set as a default template, update any existing default templates for this category
+    if (templateUpdate.isDefault === true) {
+      // Get the category of the template being updated
+      const [template] = await db.select().from(contractTemplates).where(eq(contractTemplates.id, id));
+      
+      if (template) {
+        // First get all templates in the same category that are default except the current one
+        const otherDefaultTemplates = await db
+          .select()
+          .from(contractTemplates)
+          .where(and(
+            eq(contractTemplates.category, template.category),
+            eq(contractTemplates.isDefault, true)
+          ));
+          
+        // Then update each one individually (except the current one)
+        for (const tmpl of otherDefaultTemplates) {
+          if (tmpl.id !== id) {
+            await db
+              .update(contractTemplates)
+              .set({ isDefault: false })
+              .where(eq(contractTemplates.id, tmpl.id));
+          }
+        }
+      }
+    }
+    
+    const [updatedTemplate] = await db
+      .update(contractTemplates)
+      .set(templateUpdate)
+      .where(eq(contractTemplates.id, id))
+      .returning();
+    return updatedTemplate;
+  }
+  
+  // Contract operations
+  async getContract(id: number): Promise<Contract | undefined> {
+    const [contract] = await db.select().from(contracts).where(eq(contracts.id, id));
+    return contract;
+  }
+  
+  async getContractsByNegotiation(negotiationId: number): Promise<Contract[]> {
+    return db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.negotiationId, negotiationId));
+  }
+  
+  async getContractsBySupplier(supplierId: number): Promise<Contract[]> {
+    return db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.supplierId, supplierId));
+  }
+  
+  async createContract(insertContract: InsertContract): Promise<Contract> {
+    const [contract] = await db.insert(contracts).values(insertContract).returning();
+    return contract;
+  }
+  
+  async updateContract(id: number, contractUpdate: Partial<Contract>): Promise<Contract | undefined> {
+    const [updatedContract] = await db
+      .update(contracts)
+      .set(contractUpdate)
+      .where(eq(contracts.id, id))
+      .returning();
+    return updatedContract;
   }
 }
 

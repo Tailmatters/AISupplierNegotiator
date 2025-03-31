@@ -14,7 +14,7 @@ declare global {
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
-import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema } from "@shared/schema";
+import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, InsertContractTemplate, InsertContract, InsertMessage } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 
@@ -784,6 +784,226 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Contract Templates endpoints
+  app.get("/api/contract-templates", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const templates = await storage.getContractTemplatesForUser(userId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching contract templates:", error);
+      res.status(500).json({ error: "Failed to fetch contract templates" });
+    }
+  });
+  
+  app.get("/api/contract-templates/category/:category", isAuthenticated, async (req, res) => {
+    try {
+      const category = req.params.category;
+      const templates = await storage.getContractTemplatesByCategory(category);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching contract templates by category:", error);
+      res.status(500).json({ error: "Failed to fetch contract templates" });
+    }
+  });
+  
+  app.post("/api/contract-templates", isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const file = req.file;
+      
+      if (!file) {
+        return res.status(400).json({ error: "No template file uploaded" });
+      }
+      
+      const insertTemplate: InsertContractTemplate = {
+        name: req.body.name,
+        category: req.body.category,
+        filePath: file.path,
+        fileName: file.originalname,
+        fileSize: file.size,
+        createdBy: userId,
+        description: req.body.description || null,
+        isDefault: req.body.isDefault === 'true' || req.body.isDefault === true,
+        status: req.body.status || 'active',
+        metadata: req.body.metadata ? JSON.parse(req.body.metadata) : null
+      };
+      
+      const template = await storage.createContractTemplate(insertTemplate);
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Error creating contract template:", error);
+      res.status(500).json({ error: "Failed to create contract template" });
+    }
+  });
+  
+  app.put("/api/contract-templates/:id", isAuthenticated, async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Get the template to verify ownership
+      const template = await storage.getContractTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ error: "Contract template not found" });
+      }
+      
+      if (template.createdBy !== userId) {
+        return res.status(403).json({ error: "You don't have permission to update this template" });
+      }
+      
+      const updatedTemplate = await storage.updateContractTemplate(templateId, req.body);
+      res.json(updatedTemplate);
+    } catch (error) {
+      console.error("Error updating contract template:", error);
+      res.status(500).json({ error: "Failed to update contract template" });
+    }
+  });
+  
+  // Contract endpoints
+  app.get("/api/contracts", isAuthenticated, async (req, res) => {
+    try {
+      // Get contract by negotiation ID if provided
+      if (req.query.negotiationId) {
+        const negotiationId = parseInt(req.query.negotiationId as string);
+        const contracts = await storage.getContractsByNegotiation(negotiationId);
+        return res.json(contracts);
+      }
+      
+      // Get contract by supplier ID if provided
+      if (req.query.supplierId) {
+        const supplierId = parseInt(req.query.supplierId as string);
+        const contracts = await storage.getContractsBySupplier(supplierId);
+        return res.json(contracts);
+      }
+      
+      // Otherwise return 400 - must specify negotiationId or supplierId
+      res.status(400).json({ error: "Must specify negotiationId or supplierId" });
+    } catch (error) {
+      console.error("Error fetching contracts:", error);
+      res.status(500).json({ error: "Failed to fetch contracts" });
+    }
+  });
+  
+  app.get("/api/contracts/:id", isAuthenticated, async (req, res) => {
+    try {
+      const contractId = parseInt(req.params.id);
+      const contract = await storage.getContract(contractId);
+      
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      
+      res.json(contract);
+    } catch (error) {
+      console.error("Error fetching contract:", error);
+      res.status(500).json({ error: "Failed to fetch contract" });
+    }
+  });
+  
+  app.post("/api/contracts", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Check if user has access to the negotiation
+      const negotiationId = req.body.negotiationId;
+      const negotiation = await storage.getNegotiation(negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ error: "Negotiation not found" });
+      }
+      
+      if (negotiation.createdBy !== userId) {
+        return res.status(403).json({ error: "You don't have permission to create contracts for this negotiation" });
+      }
+      
+      const insertContract: InsertContract = {
+        negotiationId: req.body.negotiationId,
+        supplierId: req.body.supplierId,
+        filePath: req.body.filePath,
+        fileName: req.body.fileName,
+        proposalId: req.body.proposalId || null,
+        templateId: req.body.templateId || null,
+        status: req.body.status || 'draft',
+        terms: req.body.terms || null,
+        metadata: req.body.metadata || null
+      };
+      
+      const contract = await storage.createContract(insertContract);
+      
+      // Create a message in the negotiation to notify about the contract
+      const message: InsertMessage = {
+        negotiationId: negotiationId,
+        senderId: userId.toString(),
+        senderType: "user",
+        content: `Contract "${req.body.fileName}" has been created`,
+        metadata: { contractId: contract.id }
+      };
+      
+      await storage.createMessage(message);
+      
+      res.status(201).json(contract);
+    } catch (error) {
+      console.error("Error creating contract:", error);
+      res.status(500).json({ error: "Failed to create contract" });
+    }
+  });
+  
+  app.put("/api/contracts/:id", isAuthenticated, async (req, res) => {
+    try {
+      const contractId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Get the contract and check if user has access to it
+      const contract = await storage.getContract(contractId);
+      
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      
+      // Get the negotiation to verify ownership
+      const negotiation = await storage.getNegotiation(contract.negotiationId);
+      
+      if (negotiation && negotiation.createdBy !== userId) {
+        return res.status(403).json({ error: "You don't have permission to update this contract" });
+      }
+      
+      const updatedContract = await storage.updateContract(contractId, req.body);
+      
+      // If status was updated to approved, create a message
+      if (req.body.status === 'approved' && contract.status !== 'approved') {
+        const message: InsertMessage = {
+          negotiationId: contract.negotiationId,
+          senderId: userId.toString(),
+          senderType: "user",
+          content: `Contract "${contract.fileName}" has been approved`,
+          metadata: { contractId: contract.id }
+        };
+        
+        await storage.createMessage(message);
+      }
+      
+      // If status was updated to signed, create a message
+      if (req.body.status === 'signed' && contract.status !== 'signed') {
+        const message: InsertMessage = {
+          negotiationId: contract.negotiationId,
+          senderId: userId.toString(),
+          senderType: "user",
+          content: `Contract "${contract.fileName}" has been signed`,
+          metadata: { contractId: contract.id }
+        };
+        
+        await storage.createMessage(message);
+      }
+      
+      res.json(updatedContract);
+    } catch (error) {
+      console.error("Error updating contract:", error);
+      res.status(500).json({ error: "Failed to update contract" });
+    }
+  });
+  
   const httpServer = createServer(app);
   return httpServer;
 }

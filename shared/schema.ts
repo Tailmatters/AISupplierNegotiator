@@ -61,6 +61,37 @@ export const invitations = pgTable("invitations", {
   respondedAt: timestamp("responded_at"),
 });
 
+export const contractTemplates = pgTable("contract_templates", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(),
+  name: text("name").notNull(),
+  filePath: text("file_path").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  description: text("description"),
+  isDefault: boolean("is_default").default(false),
+  status: text("status").default("active"),
+  metadata: json("metadata")
+});
+
+export const contracts = pgTable("contracts", {
+  id: serial("id").primaryKey(),
+  negotiationId: integer("negotiation_id").notNull().references(() => negotiations.id),
+  supplierId: integer("supplier_id").notNull().references(() => suppliers.id),
+  proposalId: integer("proposal_id").references(() => proposals.id),
+  templateId: integer("template_id").references(() => contractTemplates.id),
+  filePath: text("file_path").notNull(),
+  fileName: text("file_name").notNull(),
+  status: text("status").default("draft").notNull(),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  approvedAt: timestamp("approved_at"),
+  signedAt: timestamp("signed_at"),
+  terms: json("terms"),
+  metadata: json("metadata")
+});
+
 export const proposals = pgTable("proposals", {
   id: serial("id").primaryKey(),
   negotiationId: integer("negotiation_id").notNull(),
@@ -130,6 +161,31 @@ export const insertProposalSchema = createInsertSchema(proposals).pick({
   metadata: true,
 });
 
+export const insertContractTemplateSchema = createInsertSchema(contractTemplates).pick({
+  category: true,
+  name: true,
+  filePath: true,
+  fileName: true,
+  fileSize: true,
+  createdBy: true,
+  description: true,
+  isDefault: true,
+  status: true,
+  metadata: true,
+});
+
+export const insertContractSchema = createInsertSchema(contracts).pick({
+  negotiationId: true,
+  supplierId: true,
+  proposalId: true,
+  templateId: true,
+  filePath: true,
+  fileName: true,
+  status: true,
+  terms: true,
+  metadata: true,
+});
+
 // Types for TypeScript
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -148,6 +204,12 @@ export type Invitation = typeof invitations.$inferSelect;
 
 export type InsertProposal = z.infer<typeof insertProposalSchema>;
 export type Proposal = typeof proposals.$inferSelect;
+
+export type InsertContractTemplate = z.infer<typeof insertContractTemplateSchema>;
+export type ContractTemplate = typeof contractTemplates.$inferSelect;
+
+export type InsertContract = z.infer<typeof insertContractSchema>;
+export type Contract = typeof contracts.$inferSelect;
 
 // Define relations between tables
 export const usersRelations = relations(users, ({ many }) => ({
@@ -198,5 +260,32 @@ export const proposalsRelations = relations(proposals, ({ one }) => ({
   supplier: one(suppliers, {
     fields: [proposals.supplierId],
     references: [suppliers.id],
+  }),
+}));
+
+export const contractTemplatesRelations = relations(contractTemplates, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [contractTemplates.createdBy],
+    references: [users.id],
+  }),
+  contracts: many(contracts)
+}));
+
+export const contractsRelations = relations(contracts, ({ one }) => ({
+  negotiation: one(negotiations, {
+    fields: [contracts.negotiationId],
+    references: [negotiations.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [contracts.supplierId],
+    references: [suppliers.id],
+  }),
+  proposal: one(proposals, {
+    fields: [contracts.proposalId],
+    references: [proposals.id],
+  }),
+  template: one(contractTemplates, {
+    fields: [contracts.templateId],
+    references: [contractTemplates.id],
   }),
 }));
