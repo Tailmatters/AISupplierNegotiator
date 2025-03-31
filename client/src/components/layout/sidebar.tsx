@@ -83,17 +83,14 @@ export function Sidebar({ mobile = false, onClose }: SidebarProps) {
                 key={index} 
                 href={item.path}
                 onClick={mobile ? onClose : undefined}
+                className={`flex items-center p-3 rounded-md mb-1 ${
+                  isActive(item.path)
+                    ? "bg-primary/10 text-primary border-l-2 border-primary"
+                    : "text-neutral-600 hover:bg-neutral-50"
+                }`}
               >
-                <a 
-                  className={`flex items-center p-3 rounded-md mb-1 ${
-                    isActive(item.path)
-                      ? "bg-primary/10 text-primary border-l-2 border-primary"
-                      : "text-neutral-600 hover:bg-neutral-50"
-                  }`}
-                >
-                  <span className="w-5 text-center mr-3">{item.icon}</span>
-                  <span>{item.label}</span>
-                </a>
+                <span className="w-5 text-center mr-3">{item.icon}</span>
+                <span>{item.label}</span>
               </Link>
             ))}
           </div>
