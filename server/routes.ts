@@ -120,6 +120,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  app.patch("/api/suppliers/:id", isAuthenticated, async (req, res) => {
+    try {
+      const supplierId = parseInt(req.params.id);
+      const supplier = await storage.getSupplier(supplierId);
+      
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      
+      // Update the supplier
+      const updatedSupplier = await storage.updateSupplier(supplierId, req.body);
+      
+      if (!updatedSupplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      
+      res.json(updatedSupplier);
+    } catch (error) {
+      console.error("Error updating supplier:", error);
+      res.status(500).json({ message: "Error updating supplier" });
+    }
+  });
+  
   // Negotiation routes
   app.get("/api/negotiations", isAuthenticated, async (req, res) => {
     try {

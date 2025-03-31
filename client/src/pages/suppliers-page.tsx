@@ -82,6 +82,8 @@ const categories = [
 export default function SuppliersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingSupplierId, setEditingSupplierId] = useState<number | null>(null);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof supplierFormSchema>>({
@@ -118,7 +120,7 @@ export default function SuppliersPage() {
   });
 
   // Create supplier mutation
-  const { mutate, isPending } = useMutation({
+  const { mutate: createSupplier, isPending: isCreating } = useMutation({
     mutationFn: async (data: z.infer<typeof supplierFormSchema>) => {
       return await apiRequest("POST", "/api/suppliers", data);
     },
@@ -140,8 +142,72 @@ export default function SuppliersPage() {
     },
   });
 
+  // Update supplier mutation
+  const { mutate: updateSupplier, isPending: isUpdating } = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: z.infer<typeof supplierFormSchema> }) => {
+      return await apiRequest("PATCH", `/api/suppliers/${id}`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Supplier updated",
+        description: "The supplier has been successfully updated.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      form.reset();
+      setIsEditMode(false);
+      setEditingSupplierId(null);
+      setIsDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error updating supplier",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Toggle supplier status
+  const { mutate: toggleSupplierStatus } = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      return await apiRequest("PATCH", `/api/suppliers/${id}`, { status });
+    },
+    onSuccess: (_, variables) => {
+      const newStatus = variables.status === "active" ? "inactive" : "active";
+      toast({
+        title: `Supplier ${newStatus === "active" ? "activated" : "deactivated"}`,
+        description: `The supplier has been ${newStatus === "active" ? "activated" : "deactivated"}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error updating supplier status",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   function onSubmit(data: z.infer<typeof supplierFormSchema>) {
-    mutate(data);
+    if (isEditMode && editingSupplierId) {
+      updateSupplier({ id: editingSupplierId, data });
+    } else {
+      createSupplier(data);
+    }
+  }
+  
+  function handleEditSupplier(supplier: any) {
+    setIsEditMode(true);
+    setEditingSupplierId(supplier.id);
+    form.reset({
+      name: supplier.name,
+      email: supplier.email,
+      contactPerson: supplier.contactPerson || "",
+      category: supplier.category,
+      status: supplier.status,
+    });
+    setIsDialogOpen(true);
   }
 
   const getStatusBadge = (status: string) => {
@@ -163,7 +229,26 @@ export default function SuppliersPage() {
             <h1 className="text-2xl font-bold text-neutral-800">Suppliers</h1>
             <p className="text-neutral-500">Manage your suppliers and categories</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog 
+            open={isDialogOpen} 
+            onOpenChange={(open) => {
+              setIsDialogOpen(open);
+              if (!open) {
+                // Reset form and edit mode when dialog closes
+                setTimeout(() => {
+                  setIsEditMode(false);
+                  setEditingSupplierId(null);
+                  form.reset({
+                    name: "",
+                    email: "",
+                    contactPerson: "",
+                    category: "",
+                    status: "active",
+                  });
+                }, 200);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" /> Add Supplier
@@ -171,9 +256,11 @@ export default function SuppliersPage() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>Add New Supplier</DialogTitle>
+                <DialogTitle>{isEditMode ? "Edit Supplier" : "Add New Supplier"}</DialogTitle>
                 <DialogDescription>
-                  Enter the details of the supplier you want to add.
+                  {isEditMode 
+                    ? "Update the details of this supplier." 
+                    : "Enter the details of the supplier you want to add."}
                 </DialogDescription>
               </DialogHeader>
               <Form {...form}>
@@ -253,17 +340,55 @@ export default function SuppliersPage() {
                       </FormItem>
                     )}
                   />
+                  {isEditMode && (
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="active">Active</SelectItem>
+                                  <SelectItem value="inactive">Inactive</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   <DialogFooter>
-                    <Button type="submit" disabled={isPending}>
-                      {isPending ? (
+                    <Button 
+                      type="submit" 
+                      disabled={isCreating || isUpdating}
+                      className={isEditMode ? "bg-blue-600 hover:bg-blue-700" : ""}
+                    >
+                      {(isCreating || isUpdating) ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
-                          Creating...
+                          {isEditMode ? "Updating..." : "Creating..."}
                         </>
                       ) : (
                         <>
-                          <Plus className="mr-2 h-4 w-4" /> 
-                          Add Supplier
+                          {isEditMode ? (
+                            <>
+                              <Check className="mr-2 h-4 w-4" /> 
+                              Update Supplier
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="mr-2 h-4 w-4" /> 
+                              Add Supplier
+                            </>
+                          )}
                         </>
                       )}
                     </Button>
@@ -377,20 +502,16 @@ export default function SuppliersPage() {
                                 <Handshake className="h-4 w-4 mr-2" /> Start Negotiation
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => {
-                                  toast({
-                                    title: "Edit supplier",
-                                    description: "Edit functionality will be implemented soon.",
-                                  });
-                                }}
+                                onClick={() => handleEditSupplier(supplier)}
                               >
                                 <User className="h-4 w-4 mr-2" /> Edit Details
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  toast({
-                                    title: `Supplier ${supplier.status === "active" ? "deactivated" : "activated"}`,
-                                    description: `${supplier.name} has been ${supplier.status === "active" ? "deactivated" : "activated"}.`,
+                                  const newStatus = supplier.status === "active" ? "inactive" : "active";
+                                  toggleSupplierStatus({ 
+                                    id: supplier.id, 
+                                    status: newStatus 
                                   });
                                 }}
                               >
