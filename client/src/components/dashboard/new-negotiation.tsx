@@ -31,7 +31,7 @@ const formSchema = z.object({
 export function NewNegotiation() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { toast } = useToast();
-  const [_, navigate] = useLocation();
+  const [, navigate] = useLocation();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -50,7 +50,7 @@ export function NewNegotiation() {
 
   // Get unique categories from suppliers
   const categories = suppliers 
-    ? [...new Set(suppliers.map(supplier => supplier.category))]
+    ? Array.from(new Set(suppliers.map(supplier => supplier.category)))
     : [];
 
   // Filter suppliers by selected category

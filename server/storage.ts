@@ -1,13 +1,21 @@
 import { 
   User, InsertUser, Supplier, InsertSupplier, 
   Negotiation, InsertNegotiation, Message, InsertMessage,
-  Invitation, InsertInvitation
+  Invitation, InsertInvitation,
+  users, suppliers, negotiations, messages, invitations
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
+import connectPg from "connect-pg-simple";
+import pkg from "pg";
+const { Pool } = pkg;
 
 const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Storage interface for all CRUD operations
 export interface IStorage {
@@ -43,7 +51,7 @@ export interface IStorage {
   updateInvitation(id: number, invitation: Partial<Invitation>): Promise<Invitation | undefined>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any;
 }
 
 export class MemStorage implements IStorage {
@@ -53,7 +61,7 @@ export class MemStorage implements IStorage {
   private messages: Map<number, Message>;
   private invitations: Map<number, Invitation>;
   
-  sessionStore: session.SessionStore;
+  sessionStore: any;
   
   // ID counters
   private userIdCounter: number;
@@ -314,5 +322,223 @@ export class MemStorage implements IStorage {
   }
 }
 
+// Database storage implementation
+export class DatabaseStorage implements IStorage {
+  sessionStore: any;
+
+  constructor() {
+    this.sessionStore = new PostgresSessionStore({ 
+      pool,
+      createTableIfMissing: true
+    });
+  }
+
+  // User operations
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+  
+  // Supplier operations
+  async getSupplier(id: number): Promise<Supplier | undefined> {
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.id, id));
+    return supplier;
+  }
+  
+  async getSupplierByEmail(email: string): Promise<Supplier | undefined> {
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.email, email));
+    return supplier;
+  }
+  
+  async getSuppliers(): Promise<Supplier[]> {
+    return db.select().from(suppliers);
+  }
+  
+  async createSupplier(insertSupplier: InsertSupplier): Promise<Supplier> {
+    const [supplier] = await db.insert(suppliers).values(insertSupplier).returning();
+    return supplier;
+  }
+  
+  async updateSupplier(id: number, supplierUpdate: Partial<Supplier>): Promise<Supplier | undefined> {
+    const [updatedSupplier] = await db
+      .update(suppliers)
+      .set(supplierUpdate)
+      .where(eq(suppliers.id, id))
+      .returning();
+    return updatedSupplier;
+  }
+  
+  // Negotiation operations
+  async getNegotiation(id: number): Promise<Negotiation | undefined> {
+    const [negotiation] = await db.select().from(negotiations).where(eq(negotiations.id, id));
+    return negotiation;
+  }
+  
+  async getNegotiations(): Promise<Negotiation[]> {
+    return db.select().from(negotiations).orderBy(desc(negotiations.startedAt));
+  }
+  
+  async getNegotiationsByUser(userId: number): Promise<Negotiation[]> {
+    return db
+      .select()
+      .from(negotiations)
+      .where(eq(negotiations.createdBy, userId))
+      .orderBy(desc(negotiations.startedAt));
+  }
+  
+  async createNegotiation(insertNegotiation: InsertNegotiation): Promise<Negotiation> {
+    const [negotiation] = await db.insert(negotiations).values(insertNegotiation).returning();
+    return negotiation;
+  }
+  
+  async updateNegotiation(id: number, negotiationUpdate: Partial<Negotiation>): Promise<Negotiation | undefined> {
+    const [updatedNegotiation] = await db
+      .update(negotiations)
+      .set(negotiationUpdate)
+      .where(eq(negotiations.id, id))
+      .returning();
+    return updatedNegotiation;
+  }
+  
+  // Message operations
+  async getMessage(id: number): Promise<Message | undefined> {
+    const [message] = await db.select().from(messages).where(eq(messages.id, id));
+    return message;
+  }
+  
+  async getMessagesByNegotiation(negotiationId: number): Promise<Message[]> {
+    return db
+      .select()
+      .from(messages)
+      .where(eq(messages.negotiationId, negotiationId))
+      .orderBy(messages.timestamp);
+  }
+  
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const [message] = await db.insert(messages).values(insertMessage).returning();
+    
+    // Increment message count in the negotiation
+    // Get the current negotiation
+    const [negotiation] = await db
+      .select()
+      .from(negotiations)
+      .where(eq(negotiations.id, insertMessage.negotiationId));
+      
+    if (negotiation) {
+      // Increment the message count
+      const messageCount = (negotiation.messageCount || 0) + 1;
+      await db
+        .update(negotiations)
+        .set({ messageCount })
+        .where(eq(negotiations.id, insertMessage.negotiationId));
+    }
+      
+    return message;
+  }
+  
+  // Invitation operations
+  async getInvitation(id: number): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations).where(eq(invitations.id, id));
+    return invitation;
+  }
+  
+  async getInvitationByToken(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations).where(eq(invitations.token, token));
+    return invitation;
+  }
+  
+  async getInvitationsByNegotiation(negotiationId: number): Promise<Invitation[]> {
+    return db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.negotiationId, negotiationId));
+  }
+  
+  async createInvitation(insertInvitation: InsertInvitation): Promise<Invitation> {
+    const [invitation] = await db.insert(invitations).values(insertInvitation).returning();
+    return invitation;
+  }
+  
+  async updateInvitation(id: number, invitationUpdate: Partial<Invitation>): Promise<Invitation | undefined> {
+    const [updatedInvitation] = await db
+      .update(invitations)
+      .set(invitationUpdate)
+      .where(eq(invitations.id, id))
+      .returning();
+    return updatedInvitation;
+  }
+}
+
 // Create storage instance
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
+
+// Seed database with sample suppliers if needed
+async function seedSampleData() {
+  // Check if we already have suppliers
+  const existingSuppliers = await storage.getSuppliers();
+  
+  if (existingSuppliers.length === 0) {
+    console.log("Seeding database with sample suppliers...");
+    
+    // Sample suppliers
+    const sampleSuppliers: InsertSupplier[] = [
+      {
+        name: "Dell Technologies",
+        email: "contact@dell.com",
+        contactPerson: "John Miller",
+        category: "IT Hardware",
+        status: "active"
+      },
+      {
+        name: "Herman Miller",
+        email: "procurement@hermanmiller.com",
+        contactPerson: "Sarah Johnson",
+        category: "Office Furniture",
+        status: "active"
+      },
+      {
+        name: "DHL Express",
+        email: "business@dhl.com",
+        contactPerson: "Michael Torres",
+        category: "Logistics",
+        status: "active"
+      },
+      {
+        name: "AWS",
+        email: "enterprise@aws.com",
+        contactPerson: "Jason Wei",
+        category: "Cloud Services",
+        status: "active"
+      },
+      {
+        name: "Staples",
+        email: "b2b@staples.com",
+        contactPerson: "Melissa Chen",
+        category: "Office Supplies",
+        status: "inactive"
+      }
+    ];
+    
+    // Create suppliers
+    for (const supplier of sampleSuppliers) {
+      await storage.createSupplier(supplier);
+    }
+    
+    console.log("Database seeded successfully!");
+  }
+}
+
+// Call seed function
+seedSampleData().catch(error => {
+  console.error("Error seeding database:", error);
+});

@@ -1,6 +1,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -118,3 +119,44 @@ export type Message = typeof messages.$inferSelect;
 
 export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 export type Invitation = typeof invitations.$inferSelect;
+
+// Define relations between tables
+export const usersRelations = relations(users, ({ many }) => ({
+  negotiations: many(negotiations),
+}));
+
+export const suppliersRelations = relations(suppliers, ({ many }) => ({
+  negotiations: many(negotiations),
+  invitations: many(invitations),
+}));
+
+export const negotiationsRelations = relations(negotiations, ({ one, many }) => ({
+  supplier: one(suppliers, {
+    fields: [negotiations.supplierId],
+    references: [suppliers.id],
+  }),
+  creator: one(users, {
+    fields: [negotiations.createdBy],
+    references: [users.id],
+  }),
+  messages: many(messages),
+  invitations: many(invitations),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  negotiation: one(negotiations, {
+    fields: [messages.negotiationId],
+    references: [negotiations.id],
+  }),
+}));
+
+export const invitationsRelations = relations(invitations, ({ one }) => ({
+  negotiation: one(negotiations, {
+    fields: [invitations.negotiationId],
+    references: [negotiations.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [invitations.supplierId],
+    references: [suppliers.id],
+  }),
+}));
