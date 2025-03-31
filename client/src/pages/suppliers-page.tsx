@@ -362,16 +362,38 @@ export default function SuppliersPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  window.location.href = `mailto:${supplier.email}`;
+                                }}
+                              >
                                 <Mail className="h-4 w-4 mr-2" /> Send Email
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  window.location.href = `/negotiations?action=new&supplierId=${supplier.id}`;
+                                }}
+                              >
                                 <Handshake className="h-4 w-4 mr-2" /> Start Negotiation
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  toast({
+                                    title: "Edit supplier",
+                                    description: "Edit functionality will be implemented soon.",
+                                  });
+                                }}
+                              >
                                 <User className="h-4 w-4 mr-2" /> Edit Details
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  toast({
+                                    title: `Supplier ${supplier.status === "active" ? "deactivated" : "activated"}`,
+                                    description: `${supplier.name} has been ${supplier.status === "active" ? "deactivated" : "activated"}.`,
+                                  });
+                                }}
+                              >
                                 {supplier.status === "active" ? (
                                   <>
                                     <X className="h-4 w-4 mr-2" /> Set as Inactive
