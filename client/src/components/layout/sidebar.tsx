@@ -7,7 +7,7 @@ import {
   LayoutDashboard,
   Handshake,
   Building2,
-  FileContract,
+  FileText,
   Settings,
   User,
   Menu,
@@ -37,7 +37,7 @@ export function Sidebar({ mobile = false, onClose }: SidebarProps) {
         { label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" />, path: "/" },
         { label: "Negotiations", icon: <Handshake className="w-5 h-5" />, path: "/negotiations" },
         { label: "Suppliers", icon: <Building2 className="w-5 h-5" />, path: "/suppliers" },
-        { label: "Contracts", icon: <FileContract className="w-5 h-5" />, path: "/contracts" },
+        { label: "Contracts", icon: <FileText className="w-5 h-5" />, path: "/contracts" },
       ],
     },
     {

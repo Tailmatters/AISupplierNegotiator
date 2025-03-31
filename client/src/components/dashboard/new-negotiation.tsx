@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { FileUpload } from "@/components/ui/file-upload";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ const formSchema = z.object({
 export function NewNegotiation() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { toast } = useToast();
-  const [navigate] = useNavigate();
+  const [_, navigate] = useLocation();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
