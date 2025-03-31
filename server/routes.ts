@@ -4,10 +4,17 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { analyzePastNegotiations, generateInitialMessage, generateNegotiationResponse, analyzeNegotiationResult } from "./openai";
 import multer from "multer";
+
+// Add multer types to Express namespace
+declare global {
+  namespace Express {
+    // This extends the existing Express namespace
+  }
+}
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
-import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema } from "@shared/schema";
+import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 
@@ -166,19 +173,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.post("/api/negotiations", isAuthenticated, upload.single('pastData'), async (req, res) => {
+  app.post("/api/negotiations", isAuthenticated, upload.single('pastData'), async (req: Request, res: Response) => {
     try {
       // If file was uploaded, read its contents
       let pastDataContent = "";
       let pastDataFilePath = "";
       
-      if (req.file) {
-        pastDataFilePath = req.file.path;
+      const uploadedFile = req.file as Express.Multer.File | undefined;
+      if (uploadedFile) {
+        pastDataFilePath = uploadedFile.path;
         
         // Read file content if it's a text file
-        const ext = path.extname(req.file.originalname).toLowerCase();
+        const ext = path.extname(uploadedFile.originalname).toLowerCase();
         if (ext === '.txt' || ext === '.csv') {
-          pastDataContent = fs.readFileSync(req.file.path, 'utf8');
+          pastDataContent = fs.readFileSync(uploadedFile.path, 'utf8');
         } else {
           pastDataContent = "File uploaded but content not readable in plain text format.";
         }
@@ -563,6 +571,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error creating supplier message:", error);
       res.status(500).json({ message: "Error creating supplier message" });
+    }
+  });
+  
+  // Supplier proposal endpoints
+  app.post("/api/invitation/:token/proposals", upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      const invitation = await storage.getInvitationByToken(req.params.token);
+      
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+      
+      const negotiation = await storage.getNegotiation(invitation.negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+      
+      // Verify file was uploaded
+      const uploadedFile = req.file as Express.Multer.File | undefined;
+      if (!uploadedFile) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      
+      // Create proposal
+      const proposalData = {
+        negotiationId: negotiation.id,
+        supplierId: invitation.supplierId,
+        filePath: uploadedFile.path,
+        fileName: uploadedFile.originalname,
+        fileSize: uploadedFile.size,
+        description: req.body.description || null,
+        amount: req.body.amount ? parseFloat(req.body.amount) : null,
+        status: "pending",
+        metadata: req.body.metadata || null
+      };
+      
+      try {
+        const validatedData = insertProposalSchema.parse(proposalData);
+        const proposal = await storage.createProposal(validatedData);
+        
+        // Create system message about proposal submission
+        await storage.createMessage({
+          negotiationId: negotiation.id,
+          senderId: "system",
+          senderType: "system",
+          content: `Supplier submitted a proposal: ${uploadedFile.originalname}`,
+          metadata: { event: "proposal_submitted", proposalId: proposal.id }
+        });
+        
+        res.status(201).json(proposal);
+      } catch (validationError) {
+        if (validationError instanceof z.ZodError) {
+          const error = fromZodError(validationError);
+          return res.status(400).json({ message: error.message });
+        }
+        throw validationError;
+      }
+    } catch (error) {
+      console.error("Error creating proposal:", error);
+      res.status(500).json({ message: "Error creating proposal" });
+    }
+  });
+  
+  // Get proposals for a negotiation (admin)
+  app.get("/api/negotiations/:id/proposals", isAuthenticated, async (req, res) => {
+    try {
+      const negotiationId = parseInt(req.params.id);
+      const negotiation = await storage.getNegotiation(negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+      
+      // Check if user is authorized to view proposals
+      if (negotiation.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to view proposals for this negotiation" });
+      }
+      
+      const proposals = await storage.getProposalsByNegotiation(negotiationId);
+      
+      // For each proposal, get the supplier details
+      const proposalsWithSupplierInfo = await Promise.all(
+        proposals.map(async (proposal) => {
+          const supplier = await storage.getSupplier(proposal.supplierId);
+          return {
+            ...proposal,
+            supplier: supplier ? {
+              name: supplier.name,
+              email: supplier.email
+            } : null
+          };
+        })
+      );
+      
+      res.json(proposalsWithSupplierInfo);
+    } catch (error) {
+      console.error("Error fetching proposals:", error);
+      res.status(500).json({ message: "Error fetching proposals" });
+    }
+  });
+  
+  // Update proposal status (accept/reject)
+  app.patch("/api/proposals/:id", isAuthenticated, async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      const proposal = await storage.getProposal(proposalId);
+      
+      if (!proposal) {
+        return res.status(404).json({ message: "Proposal not found" });
+      }
+      
+      // Get negotiation to verify user permission
+      const negotiation = await storage.getNegotiation(proposal.negotiationId);
+      
+      if (!negotiation || negotiation.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to update this proposal" });
+      }
+      
+      // Only allow status update
+      const updatedProposal = await storage.updateProposal(proposalId, {
+        status: req.body.status
+      });
+      
+      // Create system message about proposal status change
+      await storage.createMessage({
+        negotiationId: proposal.negotiationId,
+        senderId: "system",
+        senderType: "system",
+        content: `Proposal ${req.body.status}: ${proposal.fileName}`,
+        metadata: { event: "proposal_status_change", proposalId, status: req.body.status }
+      });
+      
+      res.json(updatedProposal);
+    } catch (error) {
+      console.error("Error updating proposal:", error);
+      res.status(500).json({ message: "Error updating proposal" });
     }
   });
   

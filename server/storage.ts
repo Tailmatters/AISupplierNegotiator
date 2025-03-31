@@ -1,8 +1,8 @@
 import { 
   User, InsertUser, Supplier, InsertSupplier, 
   Negotiation, InsertNegotiation, Message, InsertMessage,
-  Invitation, InsertInvitation,
-  users, suppliers, negotiations, messages, invitations
+  Invitation, InsertInvitation, Proposal, InsertProposal,
+  users, suppliers, negotiations, messages, invitations, proposals
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -50,6 +50,13 @@ export interface IStorage {
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   updateInvitation(id: number, invitation: Partial<Invitation>): Promise<Invitation | undefined>;
   
+  // Proposal operations
+  getProposal(id: number): Promise<Proposal | undefined>;
+  getProposalsByNegotiation(negotiationId: number): Promise<Proposal[]>;
+  getProposalsBySupplier(supplierId: number): Promise<Proposal[]>;
+  createProposal(proposal: InsertProposal): Promise<Proposal>;
+  updateProposal(id: number, proposal: Partial<Proposal>): Promise<Proposal | undefined>;
+  
   // Session store
   sessionStore: any;
 }
@@ -60,6 +67,7 @@ export class MemStorage implements IStorage {
   private negotiations: Map<number, Negotiation>;
   private messages: Map<number, Message>;
   private invitations: Map<number, Invitation>;
+  private proposals: Map<number, Proposal>;
   
   sessionStore: any;
   
@@ -69,6 +77,7 @@ export class MemStorage implements IStorage {
   private negotiationIdCounter: number;
   private messageIdCounter: number;
   private invitationIdCounter: number;
+  private proposalIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -76,12 +85,14 @@ export class MemStorage implements IStorage {
     this.negotiations = new Map();
     this.messages = new Map();
     this.invitations = new Map();
+    this.proposals = new Map();
     
     this.userIdCounter = 1;
     this.supplierIdCounter = 1;
     this.negotiationIdCounter = 1;
     this.messageIdCounter = 1;
     this.invitationIdCounter = 1;
+    this.proposalIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -270,6 +281,48 @@ export class MemStorage implements IStorage {
     const updatedInvitation = { ...invitation, ...invitationUpdate };
     this.invitations.set(id, updatedInvitation);
     return updatedInvitation;
+  }
+  
+  // Proposal operations
+  async getProposal(id: number): Promise<Proposal | undefined> {
+    return this.proposals.get(id);
+  }
+  
+  async getProposalsByNegotiation(negotiationId: number): Promise<Proposal[]> {
+    return Array.from(this.proposals.values()).filter(
+      (proposal) => proposal.negotiationId === negotiationId
+    );
+  }
+  
+  async getProposalsBySupplier(supplierId: number): Promise<Proposal[]> {
+    return Array.from(this.proposals.values()).filter(
+      (proposal) => proposal.supplierId === supplierId
+    );
+  }
+  
+  async createProposal(insertProposal: InsertProposal): Promise<Proposal> {
+    const id = this.proposalIdCounter++;
+    const now = new Date();
+    const proposal: Proposal = {
+      ...insertProposal,
+      id,
+      createdAt: now,
+      status: insertProposal.status || "pending",
+      description: insertProposal.description || null,
+      amount: insertProposal.amount || null,
+      metadata: insertProposal.metadata || null
+    };
+    this.proposals.set(id, proposal);
+    return proposal;
+  }
+  
+  async updateProposal(id: number, proposalUpdate: Partial<Proposal>): Promise<Proposal | undefined> {
+    const proposal = this.proposals.get(id);
+    if (!proposal) return undefined;
+    
+    const updatedProposal = { ...proposal, ...proposalUpdate };
+    this.proposals.set(id, updatedProposal);
+    return updatedProposal;
   }
   
   // Initialize sample data
@@ -487,6 +540,42 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invitations.id, id))
       .returning();
     return updatedInvitation;
+  }
+  
+  // Proposal operations
+  async getProposal(id: number): Promise<Proposal | undefined> {
+    const [proposal] = await db.select().from(proposals).where(eq(proposals.id, id));
+    return proposal;
+  }
+  
+  async getProposalsByNegotiation(negotiationId: number): Promise<Proposal[]> {
+    return db
+      .select()
+      .from(proposals)
+      .where(eq(proposals.negotiationId, negotiationId))
+      .orderBy(desc(proposals.createdAt));
+  }
+  
+  async getProposalsBySupplier(supplierId: number): Promise<Proposal[]> {
+    return db
+      .select()
+      .from(proposals)
+      .where(eq(proposals.supplierId, supplierId))
+      .orderBy(desc(proposals.createdAt));
+  }
+  
+  async createProposal(insertProposal: InsertProposal): Promise<Proposal> {
+    const [proposal] = await db.insert(proposals).values(insertProposal).returning();
+    return proposal;
+  }
+  
+  async updateProposal(id: number, proposalUpdate: Partial<Proposal>): Promise<Proposal | undefined> {
+    const [updatedProposal] = await db
+      .update(proposals)
+      .set(proposalUpdate)
+      .where(eq(proposals.id, id))
+      .returning();
+    return updatedProposal;
   }
 }
 

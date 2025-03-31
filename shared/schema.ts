@@ -61,6 +61,20 @@ export const invitations = pgTable("invitations", {
   respondedAt: timestamp("responded_at"),
 });
 
+export const proposals = pgTable("proposals", {
+  id: serial("id").primaryKey(),
+  negotiationId: integer("negotiation_id").notNull(),
+  supplierId: integer("supplier_id").notNull(),
+  filePath: text("file_path").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(), // in bytes
+  description: text("description"),
+  amount: text("amount"), // Monetary amount (stored as text to handle different currencies)
+  status: text("status").default("pending"), // pending, accepted, rejected
+  createdAt: timestamp("created_at").defaultNow(),
+  metadata: json("metadata"), // Any additional data
+});
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -104,6 +118,18 @@ export const insertInvitationSchema = createInsertSchema(invitations).pick({
   status: true,
 });
 
+export const insertProposalSchema = createInsertSchema(proposals).pick({
+  negotiationId: true,
+  supplierId: true,
+  filePath: true,
+  fileName: true,
+  fileSize: true,
+  description: true,
+  amount: true,
+  status: true,
+  metadata: true,
+});
+
 // Types for TypeScript
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -119,6 +145,9 @@ export type Message = typeof messages.$inferSelect;
 
 export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 export type Invitation = typeof invitations.$inferSelect;
+
+export type InsertProposal = z.infer<typeof insertProposalSchema>;
+export type Proposal = typeof proposals.$inferSelect;
 
 // Define relations between tables
 export const usersRelations = relations(users, ({ many }) => ({
@@ -157,6 +186,17 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
   supplier: one(suppliers, {
     fields: [invitations.supplierId],
+    references: [suppliers.id],
+  }),
+}));
+
+export const proposalsRelations = relations(proposals, ({ one }) => ({
+  negotiation: one(negotiations, {
+    fields: [proposals.negotiationId],
+    references: [negotiations.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [proposals.supplierId],
     references: [suppliers.id],
   }),
 }));

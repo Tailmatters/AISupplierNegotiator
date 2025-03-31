@@ -99,16 +99,16 @@ export default function SuppliersPage() {
 
   // Fetch all suppliers
   const {
-    data: suppliers,
+    data: suppliers = [],
     isLoading,
     isError,
     refetch,
-  } = useQuery({
+  } = useQuery<any[]>({
     queryKey: ["/api/suppliers"],
   });
 
   // Filter suppliers based on search query
-  const filteredSuppliers = suppliers?.filter((supplier: any) => {
+  const filteredSuppliers = suppliers.filter((supplier) => {
     return (
       searchQuery === "" ||
       supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
