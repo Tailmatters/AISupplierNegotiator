@@ -108,7 +108,8 @@ export class MemStorage implements IStorage {
     const user: User = { 
       ...insertUser, 
       id, 
-      createdAt: now 
+      createdAt: now,
+      role: insertUser.role || "user"
     };
     this.users.set(id, user);
     return user;
@@ -136,7 +137,9 @@ export class MemStorage implements IStorage {
       ...insertSupplier, 
       id, 
       createdAt: now,
-      lastActivity: now
+      lastActivity: now,
+      status: insertSupplier.status || "active",
+      contactPerson: insertSupplier.contactPerson || null
     };
     this.suppliers.set(id, supplier);
     return supplier;
@@ -176,7 +179,9 @@ export class MemStorage implements IStorage {
       messageCount: 0,
       completedAt: null,
       outcome: null,
-      savingsPercentage: null
+      savingsPercentage: null,
+      status: insertNegotiation.status || "pending",
+      pastDataFilePath: insertNegotiation.pastDataFilePath || null
     };
     this.negotiations.set(id, negotiation);
     return negotiation;
@@ -199,7 +204,11 @@ export class MemStorage implements IStorage {
   async getMessagesByNegotiation(negotiationId: number): Promise<Message[]> {
     return Array.from(this.messages.values())
       .filter((message) => message.negotiationId === negotiationId)
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      .sort((a, b) => {
+        const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : 0;
+        const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : 0;
+        return aTime - bTime;
+      });
   }
   
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
@@ -208,7 +217,8 @@ export class MemStorage implements IStorage {
     const message: Message = { 
       ...insertMessage, 
       id,
-      timestamp: now
+      timestamp: now,
+      metadata: insertMessage.metadata || null
     };
     this.messages.set(id, message);
     
@@ -246,7 +256,8 @@ export class MemStorage implements IStorage {
       ...insertInvitation, 
       id,
       createdAt: now,
-      respondedAt: null
+      respondedAt: null,
+      status: insertInvitation.status || "pending"
     };
     this.invitations.set(id, invitation);
     return invitation;
