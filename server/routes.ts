@@ -1318,6 +1318,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get widget data by widget type ID
+  app.get("/api/widget-data/:widgetTypeId", isAuthenticated, async (req, res) => {
+    try {
+      const widgetTypeId = parseInt(req.params.widgetTypeId);
+      const widgetType = await storage.getWidgetType(widgetTypeId);
+      
+      if (!widgetType) {
+        return res.status(404).json({ message: "Widget type not found" });
+      }
+      
+      const userId = req.user!.id;
+      let data: any = null;
+      
+      // Get data based on widget type
+      switch (widgetType.type) {
+        case 'recent-negotiations':
+          const negotiations = await storage.getNegotiationsByUser(userId);
+          data = {
+            negotiations: negotiations.slice(0, 5).map(n => ({
+              id: n.id,
+              title: n.title,
+              category: n.category,
+              status: n.status,
+              date: n.startedAt
+            }))
+          };
+          break;
+          
+        case 'category-summary':
+          const categoryData = await storage.getSpendByCategory();
+          // Generate colors for each category
+          const colors = ['#4f46e5', '#0ea5e9', '#14b8a6', '#22c55e', '#84cc16', '#eab308', '#ef4444', '#ec4899'];
+          data = {
+            categories: categoryData.map((item, index) => ({
+              name: item.category,
+              amount: parseFloat(item.total.toString()),
+              color: colors[index % colors.length]
+            }))
+          };
+          break;
+          
+        case 'top-suppliers':
+          const topSuppliers = await storage.getTopSuppliers();
+          data = {
+            suppliers: topSuppliers.map(s => ({
+              id: s.supplierId,
+              name: s.supplierName,
+              spend: parseFloat(s.total.toString())
+            }))
+          };
+          break;
+          
+        case 'spend-by-year':
+          const yearlyData = await storage.getSpendByYear();
+          const years = yearlyData.map(y => ({
+            year: y.year,
+            total: parseFloat(y.total.toString())
+          }));
+          
+          // Calculate max total for the bar chart
+          const maxTotal = Math.max(...years.map(y => y.total));
+          
+          data = {
+            years,
+            maxTotal
+          };
+          break;
+          
+        default:
+          data = { message: "Widget type not implemented" };
+      }
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching widget data:", error);
+      res.status(500).json({ message: "Error fetching widget data" });
+    }
+  });
+  
   // Dashboard endpoints
   // Get user's dashboards
   app.get("/api/dashboards", isAuthenticated, async (req, res) => {

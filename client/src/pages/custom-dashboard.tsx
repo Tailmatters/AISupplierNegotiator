@@ -104,6 +104,143 @@ const getIconComponent = (iconName: string) => {
   }
 };
 
+// Widget Content Component
+const WidgetContent = ({ widget }: { widget: Widget }) => {
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: [`/api/widget-data/${widget.widgetTypeId}`, widget.id],
+    enabled: !!widget.widgetTypeId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-full w-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="text-center text-muted-foreground">
+        <p>Failed to load widget data</p>
+      </div>
+    );
+  }
+
+  // Render widget content based on widget type
+  switch (widget.widgetType?.type) {
+    case 'recent-negotiations':
+      return <RecentNegotiationsWidget data={data} />;
+    case 'category-summary':
+      return <CategorySummaryWidget data={data} />;
+    case 'top-suppliers':
+      return <TopSuppliersWidget data={data} />;
+    case 'spend-by-year':
+      return <SpendByYearWidget data={data} />;
+    default:
+      return (
+        <div className="text-center text-muted-foreground">
+          <div className="mb-2">
+            {getIconComponent(widget.widgetType?.icon || "Grid3X3")}
+          </div>
+          <p>This widget type is not yet implemented</p>
+        </div>
+      );
+  }
+};
+
+// Specific Widget Components
+const RecentNegotiationsWidget = ({ data }: { data: any }) => {
+  if (!data || !data.negotiations || data.negotiations.length === 0) {
+    return <div className="text-center p-4">No recent negotiations</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {data.negotiations.map((negotiation: any) => (
+        <div key={negotiation.id} className="flex justify-between items-center p-2 hover:bg-accent/30 rounded">
+          <div>
+            <p className="font-medium">{negotiation.title}</p>
+            <p className="text-xs text-muted-foreground">{negotiation.category}</p>
+          </div>
+          <div className="text-xs">
+            <span className={`px-2 py-1 rounded-full ${negotiation.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+              {negotiation.status}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const CategorySummaryWidget = ({ data }: { data: any }) => {
+  if (!data || !data.categories || data.categories.length === 0) {
+    return <div className="text-center p-4">No category data available</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {data.categories.map((category: any) => (
+        <div key={category.name} className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
+            <span>{category.name}</span>
+          </div>
+          <span className="font-medium">${category.amount.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const TopSuppliersWidget = ({ data }: { data: any }) => {
+  if (!data || !data.suppliers || data.suppliers.length === 0) {
+    return <div className="text-center p-4">No supplier data available</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {data.suppliers.map((supplier: any, index: number) => (
+        <div key={supplier.id} className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
+              {index + 1}
+            </div>
+            <span>{supplier.name}</span>
+          </div>
+          <span className="font-medium">${supplier.spend.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const SpendByYearWidget = ({ data }: { data: any }) => {
+  if (!data || !data.years || data.years.length === 0) {
+    return <div className="text-center p-4">No yearly spend data available</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {data.years.map((year: any) => (
+        <div key={year.year} className="space-y-1">
+          <div className="flex justify-between items-center">
+            <span>{year.year}</span>
+            <span className="font-medium">${year.total.toLocaleString()}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-primary rounded-full h-2" 
+              style={{ width: `${(year.total / data.maxTotal) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // Widget Component
 const WidgetCard = ({ 
   widget, 
@@ -149,14 +286,8 @@ const WidgetCard = ({
         <CardDescription>
           {widget.widgetType?.description || "Widget description"}
         </CardDescription>
-        <div className="flex items-center justify-center p-6 h-40 bg-muted/20 rounded-md mt-4">
-          {/* Placeholder for actual widget content */}
-          <div className="text-center text-muted-foreground">
-            <div className="mb-2">
-              {getIconComponent(widget.widgetType?.icon || "Grid3X3")}
-            </div>
-            <p>Widget content will be displayed here</p>
-          </div>
+        <div className="p-4 min-h-[160px] bg-muted/20 rounded-md mt-4">
+          <WidgetContent widget={widget} />
         </div>
       </CardContent>
     </Card>
