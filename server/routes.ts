@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { analyzePastNegotiations, generateInitialMessage, generateNegotiationResponse, analyzeNegotiationResult } from "./openai";
+import { parse as csvParse } from 'csv-parse/sync';
 import multer from "multer";
 
 // Add multer types to Express namespace
@@ -20,7 +21,7 @@ import { dirname } from 'path';
 // Get current file path and directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier } from "@shared/schema";
+import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, insertSpendUploadSchema, insertSpendDataSchema, insertApiConnectionSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier, InsertSpendUpload, InsertSpendData, InsertApiConnection } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import XLSX from 'xlsx';
@@ -1083,6 +1084,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating contract:", error);
       res.status(500).json({ error: "Failed to update contract" });
+    }
+  });
+  
+  // Spend Analysis routes
+  // Upload spend data
+  app.post("/api/spend/upload", isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      
+      const file = req.file;
+      const userId = req.user!.id;
+      
+      // Create a spend upload record
+      const uploadData: InsertSpendUpload = {
+        userId,
+        fileName: file.originalname,
+        fileSize: file.size,
+        fileType: path.extname(file.originalname).toLowerCase().replace('.', ''),
+        source: 'csv_upload',
+        status: 'processing'
+      };
+      
+      const spendUpload = await storage.createSpendUpload(uploadData);
+      
+      // Process file asynchronously - we'll update the status later
+      try {
+        // Read the file
+        const fileData = fs.readFileSync(file.path, 'utf8');
+        
+        // Check file type and process accordingly
+        const ext = path.extname(file.originalname).toLowerCase();
+        let records: any[] = [];
+        
+        if (ext === '.csv') {
+          // Simple CSV parsing (for more complex CSVs, use a proper CSV parser library)
+          const lines = fileData.split('\n');
+          const headers = lines[0].split(',').map(h => h.trim());
+          
+          for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue; // Skip empty lines
+            
+            const values = lines[i].split(',').map(v => v.trim());
+            const record: Record<string, any> = {};
+            
+            headers.forEach((header, index) => {
+              if (index < values.length) {
+                record[header] = values[index];
+              }
+            });
+            
+            records.push(record);
+          }
+        } else if (ext === '.xlsx' || ext === '.xls') {
+          // Process Excel file
+          const workbook = XLSX.readFile(file.path);
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          records = XLSX.utils.sheet_to_json(worksheet);
+        } else {
+          throw new Error(`Unsupported file type: ${ext}`);
+        }
+        
+        if (records.length === 0) {
+          throw new Error("No data found in file");
+        }
+        
+        // Map records to SpendData schema
+        const spendDataItems: InsertSpendData[] = records.map(record => {
+          // Try to find a matching supplier
+          let supplierId = null;
+          
+          // Create base spend data record with required fields
+          return {
+            userId,
+            uploadId: spendUpload.id,
+            supplierName: record.supplier || record.Supplier || record.supplier_name || record.SupplierName || record.SUPPLIER || "Unknown Supplier",
+            supplierId, // Will be updated if we can match the supplier
+            category: record.category || record.Category || record.CATEGORY || "Uncategorized",
+            subcategory: record.subcategory || record.Subcategory || record.sub_category || null,
+            spendAmount: record.amount || record.Amount || record.AMOUNT || record.spend || record.Spend || "0",
+            currency: record.currency || record.Currency || record.CURRENCY || "USD",
+            quantity: record.quantity || record.Quantity || record.QUANTITY || null,
+            unitPrice: record.unit_price || record.unitPrice || record.UnitPrice || record.price || null,
+            itemDescription: record.description || record.Description || record.item_description || null,
+            departmentId: record.department_id || record.departmentId || record.DepartmentId || null,
+            departmentName: record.department || record.Department || record.department_name || null,
+            invoiceNumber: record.invoice || record.Invoice || record.invoice_number || record.InvoiceNumber || null,
+            poNumber: record.po || record.PO || record.po_number || record.PoNumber || null,
+            transactionDate: record.date || record.Date || record.transaction_date || record.TransactionDate ? new Date(record.date || record.Date || record.transaction_date || record.TransactionDate) : new Date(),
+            dataSource: 'csv_upload'
+          };
+        });
+        
+        // Create the spend data records
+        await storage.createManySpendData(spendDataItems);
+        
+        // Update the upload status
+        await storage.updateSpendUpload(spendUpload.id, {
+          status: 'completed',
+          recordCount: spendDataItems.length,
+          processingCompletedAt: new Date()
+        });
+        
+        // Delete the temporary file
+        fs.unlinkSync(file.path);
+        
+      } catch (processError) {
+        console.error("Error processing spend data file:", processError);
+        
+        // Update the upload status to failed
+        await storage.updateSpendUpload(spendUpload.id, {
+          status: 'failed',
+          errorMessage: processError instanceof Error ? processError.message : 'Unknown error processing file',
+          processingCompletedAt: new Date()
+        });
+        
+        // Don't fail the response, we'll return the upload record
+      }
+      
+      res.status(201).json(spendUpload);
+    } catch (error) {
+      console.error("Error uploading spend data:", error);
+      res.status(500).json({ message: "Error uploading spend data" });
+    }
+  });
+  
+  // Get spend uploads
+  app.get("/api/spend/uploads", isAuthenticated, async (req, res) => {
+    try {
+      const uploads = await storage.getSpendUploadsByUser(req.user!.id);
+      res.json(uploads);
+    } catch (error) {
+      console.error("Error fetching spend uploads:", error);
+      res.status(500).json({ message: "Error fetching spend uploads" });
+    }
+  });
+  
+  // Get spend by supplier
+  app.get("/api/spend/by-supplier", isAuthenticated, async (req, res) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const data = await storage.getSpendBySupplier(req.user!.id, year);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching spend by supplier:", error);
+      res.status(500).json({ message: "Error fetching spend by supplier" });
+    }
+  });
+  
+  // Get spend by category
+  app.get("/api/spend/by-category", isAuthenticated, async (req, res) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const data = await storage.getSpendByCategory(req.user!.id, year);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching spend by category:", error);
+      res.status(500).json({ message: "Error fetching spend by category" });
+    }
+  });
+  
+  // Get spend by year
+  app.get("/api/spend/by-year", isAuthenticated, async (req, res) => {
+    try {
+      const data = await storage.getSpendByYear(req.user!.id);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching spend by year:", error);
+      res.status(500).json({ message: "Error fetching spend by year" });
+    }
+  });
+  
+  // Get top suppliers
+  app.get("/api/spend/top-suppliers", isAuthenticated, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      const data = await storage.getTopSuppliers(req.user!.id, limit);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching top suppliers:", error);
+      res.status(500).json({ message: "Error fetching top suppliers" });
+    }
+  });
+  
+  // Get spend data records
+  app.get("/api/spend/data", isAuthenticated, async (req, res) => {
+    try {
+      const data = await storage.getSpendDataByUser(req.user!.id);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching spend data:", error);
+      res.status(500).json({ message: "Error fetching spend data" });
     }
   });
   

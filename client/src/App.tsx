@@ -13,6 +13,7 @@ import NegotiationDetails from "@/pages/negotiation-details";
 import ContractsPage from "@/pages/contracts-page";
 import SettingsPage from "@/pages/settings-page";
 import AccountPage from "@/pages/account-page";
+import SpendAnalysisPage from "@/pages/spend-analysis-page";
 
 function Router() {
   return (
@@ -22,6 +23,7 @@ function Router() {
       <ProtectedRoute path="/negotiations/:id" component={NegotiationDetails} />
       <ProtectedRoute path="/suppliers" component={SuppliersPage} />
       <ProtectedRoute path="/contracts" component={ContractsPage} />
+      <ProtectedRoute path="/spend-analysis" component={SpendAnalysisPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/account" component={AccountPage} />
       <Route path="/auth" component={AuthPage} />

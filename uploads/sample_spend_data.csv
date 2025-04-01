@@ -1,0 +1,22 @@
+supplier,category,subcategory,amount,currency,quantity,unit_price,description,department,invoice_number,po_number,date
+Dell Technologies,IT Hardware,Laptops,2500,USD,2,1250.00,XPS 15 Laptops,Engineering,INV-2023-001,PO-2023-001,2023-01-15
+Dell Technologies,IT Hardware,Monitors,1200,USD,5,240.00,24-inch Monitors,Engineering,INV-2023-002,PO-2023-001,2023-01-15
+Dell Technologies,IT Hardware,Accessories,300,USD,10,30.00,Wireless Keyboard/Mouse,Engineering,INV-2023-003,PO-2023-001,2023-01-15
+Herman Miller,Office Furniture,Chairs,4500,USD,5,900.00,Ergonomic Office Chairs,Facilities,INV-2023-010,PO-2023-005,2023-02-01
+Herman Miller,Office Furniture,Desks,3800,USD,4,950.00,Adjustable Standing Desks,Facilities,INV-2023-011,PO-2023-005,2023-02-01
+DHL Express,Logistics,Shipping,1200,USD,1,1200.00,International Shipment,Operations,INV-2023-022,PO-2023-010,2023-03-05
+DHL Express,Logistics,Shipping,800,USD,1,800.00,Domestic Shipment,Operations,INV-2023-023,PO-2023-011,2023-03-10
+AWS,Cloud Services,Compute,3500,USD,1,3500.00,EC2 Instances,IT,INV-2023-030,PO-2023-015,2023-04-01
+AWS,Cloud Services,Storage,1800,USD,1,1800.00,S3 Storage,IT,INV-2023-031,PO-2023-015,2023-04-01
+AWS,Cloud Services,Database,2200,USD,1,2200.00,RDS Instances,IT,INV-2023-032,PO-2023-015,2023-04-01
+Staples,Office Supplies,Paper Products,250,USD,10,25.00,Copy Paper,Admin,INV-2023-040,PO-2023-020,2023-05-15
+Staples,Office Supplies,Writing Instruments,120,USD,20,6.00,Pen Sets,Admin,INV-2023-041,PO-2023-020,2023-05-15
+Staples,Office Supplies,Organization,300,USD,15,20.00,File Folders,Admin,INV-2023-042,PO-2023-020,2023-05-15
+Dell Technologies,IT Hardware,Servers,8500,USD,1,8500.00,Enterprise Server,IT,INV-2023-050,PO-2023-025,2023-06-01
+Dell Technologies,IT Hardware,Storage,5500,USD,1,5500.00,Storage Array,IT,INV-2023-051,PO-2023-025,2023-06-01
+Herman Miller,Office Furniture,Cabinets,2200,USD,4,550.00,Filing Cabinets,Facilities,INV-2023-060,PO-2023-030,2023-07-10
+DHL Express,Logistics,Customs,450,USD,1,450.00,Customs Clearance,Operations,INV-2023-070,PO-2023-035,2023-08-15
+AWS,Cloud Services,Support,1500,USD,1,1500.00,Enterprise Support,IT,INV-2023-080,PO-2023-040,2023-09-01
+Staples,Office Supplies,Paper Products,250,USD,10,25.00,Copy Paper,Admin,INV-2023-090,PO-2023-045,2023-10-15
+Dell Technologies,IT Hardware,Laptops,7500,USD,5,1500.00,Precision Workstations,Engineering,INV-2023-100,PO-2023-050,2023-11-01
+Herman Miller,Office Furniture,Chairs,1800,USD,2,900.00,Ergonomic Office Chairs,Facilities,INV-2023-110,PO-2023-055,2023-12-01
