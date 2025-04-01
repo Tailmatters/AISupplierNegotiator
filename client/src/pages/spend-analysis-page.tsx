@@ -331,7 +331,7 @@ const SpendAnalysisPage = () => {
                         outerRadius={80}
                         fill="#8884d8"
                         labelLine={false}
-                        label={({ name, percent }) => `${percent.toFixed(0)}%`}
+                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                       >
                         {spendByCategory && spendByCategory.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -495,7 +495,7 @@ const SpendAnalysisPage = () => {
                           outerRadius={130}
                           fill="#8884d8"
                           labelLine={false}
-                          label={({ name, percent }) => `${percent.toFixed(0)}%`}
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                         >
                           {spendByCategory && spendByCategory.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
