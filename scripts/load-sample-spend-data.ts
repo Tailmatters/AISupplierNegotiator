@@ -1,21 +1,15 @@
 import { db } from '../server/db';
 import { spendUploads, spendData } from '../shared/schema';
 import { sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm/expressions';
 
 // Function to add sample data
 async function addSampleSpendData() {
   console.log('Adding sample spend data...');
   
   try {
-    // First check if we have a user
-    const users = await db.execute(sql`SELECT id FROM users LIMIT 1`);
-    
-    if (!users.rows || users.rows.length === 0) {
-      console.error('No users found in the database. Please create a user first.');
-      return;
-    }
-    
-    const userId = users.rows[0].id;
+    // We'll use user ID 2 (Vithal_Cyient) for the sample data
+    const userId = 2;
     console.log(`Using user ID: ${userId}`);
     
     // Check if we already have spend data
