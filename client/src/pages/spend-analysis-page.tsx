@@ -71,7 +71,7 @@ const SpendAnalysisPage = () => {
   const { data: spendByCategory, isLoading: isLoadingCategories } = useQuery<CategoryData[]>({
     queryKey: ['/api/spend/by-category', yearFilter],
     queryFn: async () => {
-      const url = yearFilter 
+      const url = yearFilter && yearFilter !== 'all' 
         ? `/api/spend/by-category?year=${yearFilter}`
         : '/api/spend/by-category';
       const res = await apiRequest('GET', url);
@@ -84,7 +84,7 @@ const SpendAnalysisPage = () => {
   const { data: spendBySupplier, isLoading: isLoadingSuppliers } = useQuery<SupplierData[]>({
     queryKey: ['/api/spend/by-supplier', yearFilter],
     queryFn: async () => {
-      const url = yearFilter 
+      const url = yearFilter && yearFilter !== 'all'
         ? `/api/spend/by-supplier?year=${yearFilter}`
         : '/api/spend/by-supplier';
       const res = await apiRequest('GET', url);
@@ -202,7 +202,7 @@ const SpendAnalysisPage = () => {
               <SelectValue placeholder="Filter by Year" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Years</SelectItem>
+              <SelectItem value="all">All Years</SelectItem>
               {availableYears.map((year: string) => (
                 <SelectItem key={year} value={year}>{year}</SelectItem>
               ))}
@@ -236,7 +236,7 @@ const SpendAnalysisPage = () => {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {yearFilter ? `in ${yearFilter}` : "across all years"}
+                  {yearFilter && yearFilter !== 'all' ? `in ${yearFilter}` : "across all years"}
                 </p>
               </CardContent>
             </Card>
