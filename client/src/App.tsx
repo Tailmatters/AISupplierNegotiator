@@ -14,11 +14,13 @@ import ContractsPage from "@/pages/contracts-page";
 import SettingsPage from "@/pages/settings-page";
 import AccountPage from "@/pages/account-page";
 import SpendAnalysisPage from "@/pages/spend-analysis-page";
+import CustomDashboardPage from "@/pages/custom-dashboard";
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={DashboardPage} />
+      <ProtectedRoute path="/custom-dashboard" component={CustomDashboardPage} />
       <ProtectedRoute path="/negotiations" component={NegotiationsPage} />
       <ProtectedRoute path="/negotiations/:id" component={NegotiationDetails} />
       <ProtectedRoute path="/suppliers" component={SuppliersPage} />

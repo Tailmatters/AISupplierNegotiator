@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   CreditCard,
-  BarChart4
+  BarChart4,
+  Grid
 } from "lucide-react";
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ export function Sidebar({ mobile = false, onClose }: SidebarProps) {
       group: "Main",
       items: [
         { label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" />, path: "/" },
+        { label: "Custom Dashboard", icon: <Grid className="w-5 h-5" />, path: "/custom-dashboard" },
         { label: "Negotiations", icon: <Handshake className="w-5 h-5" />, path: "/negotiations" },
         { label: "Suppliers", icon: <Building2 className="w-5 h-5" />, path: "/suppliers" },
         { label: "Contracts", icon: <FileText className="w-5 h-5" />, path: "/contracts" },

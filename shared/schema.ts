@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json, decimal, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json, decimal, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -157,6 +157,49 @@ export const apiConnections = pgTable("api_connections", {
   metadata: jsonb("metadata"),
 });
 
+// Dashboard widgets schema
+export const widgetTypes = pgTable("widget_types", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull().unique(), // e.g., "spend-by-category", "recent-negotiations", etc.
+  name: text("name").notNull(), // Display name
+  description: text("description"),
+  icon: text("icon"),
+  defaultHeight: integer("default_height").notNull().default(2), // Default grid height
+  defaultWidth: integer("default_width").notNull().default(2), // Default grid width
+  minHeight: integer("min_height").notNull().default(1),
+  minWidth: integer("min_width").notNull().default(1),
+  maxHeight: integer("max_height"),
+  maxWidth: integer("max_width"),
+  category: text("category").notNull().default("general"), // Analytics, Operations, etc.
+  availableSettings: jsonb("available_settings"), // Available settings for this widget type
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const dashboards = pgTable("dashboards", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  isDefault: boolean("is_default").default(false),
+  layout: jsonb("layout"), // Stores the grid layout
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const dashboardWidgets = pgTable("dashboard_widgets", {
+  id: serial("id").primaryKey(),
+  dashboardId: integer("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }),
+  widgetTypeId: integer("widget_type_id").notNull().references(() => widgetTypes.id),
+  title: text("title"),
+  settings: jsonb("settings"), // Widget-specific settings (filters, display options, etc.)
+  position: integer("position").notNull().default(0), // Order in the dashboard
+  width: integer("width").notNull().default(2), // Grid width
+  height: integer("height").notNull().default(2), // Grid height
+  x: integer("x").default(0), // Grid x position
+  y: integer("y").default(0), // Grid y position
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -313,12 +356,57 @@ export type SpendData = typeof spendData.$inferSelect;
 export type InsertApiConnection = z.infer<typeof insertApiConnectionSchema>;
 export type ApiConnection = typeof apiConnections.$inferSelect;
 
+// Dashboard widget schemas
+export const insertWidgetTypeSchema = createInsertSchema(widgetTypes).pick({
+  type: true,
+  name: true,
+  description: true,
+  icon: true,
+  defaultHeight: true,
+  defaultWidth: true,
+  minHeight: true,
+  minWidth: true,
+  maxHeight: true,
+  maxWidth: true,
+  category: true,
+  availableSettings: true,
+});
+
+export const insertDashboardSchema = createInsertSchema(dashboards).pick({
+  userId: true,
+  name: true,
+  isDefault: true,
+  layout: true,
+});
+
+export const insertDashboardWidgetSchema = createInsertSchema(dashboardWidgets).pick({
+  dashboardId: true,
+  widgetTypeId: true,
+  title: true,
+  settings: true,
+  position: true,
+  width: true,
+  height: true,
+  x: true,
+  y: true,
+});
+
+export type InsertWidgetType = z.infer<typeof insertWidgetTypeSchema>;
+export type WidgetType = typeof widgetTypes.$inferSelect;
+
+export type InsertDashboard = z.infer<typeof insertDashboardSchema>;
+export type Dashboard = typeof dashboards.$inferSelect;
+
+export type InsertDashboardWidget = z.infer<typeof insertDashboardWidgetSchema>;
+export type DashboardWidget = typeof dashboardWidgets.$inferSelect;
+
 // Define relations between tables
 export const usersRelations = relations(users, ({ many }) => ({
   negotiations: many(negotiations),
   spendUploads: many(spendUploads),
   spendData: many(spendData),
   apiConnections: many(apiConnections),
+  dashboards: many(dashboards),
 }));
 
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
@@ -425,4 +513,28 @@ export const apiConnectionsRelations = relations(apiConnections, ({ one }) => ({
     fields: [apiConnections.userId],
     references: [users.id],
   }),
+}));
+
+// Dashboard widget relations
+export const dashboardsRelations = relations(dashboards, ({ one, many }) => ({
+  user: one(users, {
+    fields: [dashboards.userId],
+    references: [users.id],
+  }),
+  widgets: many(dashboardWidgets),
+}));
+
+export const dashboardWidgetsRelations = relations(dashboardWidgets, ({ one }) => ({
+  dashboard: one(dashboards, {
+    fields: [dashboardWidgets.dashboardId],
+    references: [dashboards.id],
+  }),
+  widgetType: one(widgetTypes, {
+    fields: [dashboardWidgets.widgetTypeId],
+    references: [widgetTypes.id],
+  }),
+}));
+
+export const widgetTypesRelations = relations(widgetTypes, ({ many }) => ({
+  widgets: many(dashboardWidgets),
 }));

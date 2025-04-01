@@ -21,7 +21,7 @@ import { dirname } from 'path';
 // Get current file path and directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, insertSpendUploadSchema, insertSpendDataSchema, insertApiConnectionSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier, InsertSpendUpload, InsertSpendData, InsertApiConnection } from "@shared/schema";
+import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, insertSpendUploadSchema, insertSpendDataSchema, insertApiConnectionSchema, insertDashboardSchema, insertDashboardWidgetSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier, InsertSpendUpload, InsertSpendData, InsertApiConnection, InsertDashboard, InsertDashboardWidget } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import XLSX from 'xlsx';
@@ -1278,6 +1278,339 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching spend data:", error);
       res.status(500).json({ message: "Error fetching spend data" });
+    }
+  });
+  
+  // Dashboard Widget API endpoints
+  // Get all widget types
+  app.get("/api/widget-types", isAuthenticated, async (req, res) => {
+    try {
+      const widgetTypes = await storage.getAllWidgetTypes();
+      res.json(widgetTypes);
+    } catch (error) {
+      console.error("Error fetching widget types:", error);
+      res.status(500).json({ message: "Error fetching widget types" });
+    }
+  });
+  
+  // Get widget types by category
+  app.get("/api/widget-types/category/:category", isAuthenticated, async (req, res) => {
+    try {
+      const widgetTypes = await storage.getWidgetTypesByCategory(req.params.category);
+      res.json(widgetTypes);
+    } catch (error) {
+      console.error("Error fetching widget types by category:", error);
+      res.status(500).json({ message: "Error fetching widget types by category" });
+    }
+  });
+  
+  // Get widget type by ID
+  app.get("/api/widget-types/:id", isAuthenticated, async (req, res) => {
+    try {
+      const widgetType = await storage.getWidgetType(parseInt(req.params.id));
+      if (!widgetType) {
+        return res.status(404).json({ message: "Widget type not found" });
+      }
+      res.json(widgetType);
+    } catch (error) {
+      console.error("Error fetching widget type:", error);
+      res.status(500).json({ message: "Error fetching widget type" });
+    }
+  });
+  
+  // Dashboard endpoints
+  // Get user's dashboards
+  app.get("/api/dashboards", isAuthenticated, async (req, res) => {
+    try {
+      const dashboards = await storage.getDashboardsByUser(req.user!.id);
+      res.json(dashboards);
+    } catch (error) {
+      console.error("Error fetching dashboards:", error);
+      res.status(500).json({ message: "Error fetching dashboards" });
+    }
+  });
+  
+  // Get user's default dashboard with widgets
+  app.get("/api/dashboards/default", isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      let dashboard = await storage.getUserDefaultDashboard(userId);
+      
+      // Create default dashboard if it doesn't exist
+      if (!dashboard) {
+        dashboard = await storage.createDashboard({
+          name: "My Dashboard",
+          userId,
+          isDefault: true,
+          layout: {}
+        });
+      }
+      
+      // Get widgets for this dashboard
+      const widgets = await storage.getDashboardWidgetsByDashboard(dashboard.id);
+      
+      // Get widget types for each widget
+      const widgetsWithTypes = await Promise.all(
+        widgets.map(async (widget) => {
+          const widgetType = await storage.getWidgetType(widget.widgetTypeId);
+          return {
+            ...widget,
+            widgetType
+          };
+        })
+      );
+      
+      // Return dashboard with widgets
+      res.json({
+        ...dashboard,
+        widgets: widgetsWithTypes
+      });
+    } catch (error) {
+      console.error("Error fetching default dashboard:", error);
+      res.status(500).json({ message: "Error fetching default dashboard" });
+    }
+  });
+  
+  // Get dashboard by ID with widgets and widget types
+  app.get("/api/dashboards/:id", isAuthenticated, async (req, res) => {
+    try {
+      const dashboard = await storage.getDashboard(parseInt(req.params.id));
+      if (!dashboard) {
+        return res.status(404).json({ message: "Dashboard not found" });
+      }
+      
+      // Check if the user owns this dashboard
+      if (dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to access this dashboard" });
+      }
+      
+      // Get the widgets for this dashboard
+      const widgets = await storage.getDashboardWidgetsByDashboard(dashboard.id);
+      
+      // Get widget types for each widget
+      const widgetsWithTypes = await Promise.all(
+        widgets.map(async (widget) => {
+          const widgetType = await storage.getWidgetType(widget.widgetTypeId);
+          return {
+            ...widget,
+            widgetType
+          };
+        })
+      );
+      
+      res.json({
+        ...dashboard,
+        widgets: widgetsWithTypes
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard:", error);
+      res.status(500).json({ message: "Error fetching dashboard" });
+    }
+  });
+  
+  // Create a new dashboard
+  app.post("/api/dashboards", isAuthenticated, async (req, res) => {
+    try {
+      const dashboardData = {
+        ...req.body,
+        userId: req.user!.id
+      };
+      
+      const validatedData = insertDashboardSchema.parse(dashboardData);
+      const dashboard = await storage.createDashboard(validatedData);
+      res.status(201).json(dashboard);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating dashboard:", error);
+      res.status(500).json({ message: "Error creating dashboard" });
+    }
+  });
+  
+  // Update a dashboard
+  app.patch("/api/dashboards/:id", isAuthenticated, async (req, res) => {
+    try {
+      const dashboardId = parseInt(req.params.id);
+      const dashboard = await storage.getDashboard(dashboardId);
+      
+      if (!dashboard) {
+        return res.status(404).json({ message: "Dashboard not found" });
+      }
+      
+      // Check if the user owns this dashboard
+      if (dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to update this dashboard" });
+      }
+      
+      const updatedDashboard = await storage.updateDashboard(dashboardId, req.body);
+      res.json(updatedDashboard);
+    } catch (error) {
+      console.error("Error updating dashboard:", error);
+      res.status(500).json({ message: "Error updating dashboard" });
+    }
+  });
+  
+  // Delete a dashboard
+  app.delete("/api/dashboards/:id", isAuthenticated, async (req, res) => {
+    try {
+      const dashboardId = parseInt(req.params.id);
+      const dashboard = await storage.getDashboard(dashboardId);
+      
+      if (!dashboard) {
+        return res.status(404).json({ message: "Dashboard not found" });
+      }
+      
+      // Check if the user owns this dashboard
+      if (dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to delete this dashboard" });
+      }
+      
+      const deleted = await storage.deleteDashboard(dashboardId);
+      
+      if (deleted) {
+        res.status(204).end();
+      } else {
+        res.status(500).json({ message: "Failed to delete dashboard" });
+      }
+    } catch (error) {
+      console.error("Error deleting dashboard:", error);
+      res.status(500).json({ message: "Error deleting dashboard" });
+    }
+  });
+  
+  // Dashboard Widget endpoints
+  // Get widget by ID with widget type information
+  app.get("/api/dashboard-widgets/:id", isAuthenticated, async (req, res) => {
+    try {
+      const widget = await storage.getDashboardWidget(parseInt(req.params.id));
+      
+      if (!widget) {
+        return res.status(404).json({ message: "Widget not found" });
+      }
+      
+      // Check if the user owns the dashboard this widget belongs to
+      const dashboard = await storage.getDashboard(widget.dashboardId);
+      
+      if (!dashboard || dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to access this widget" });
+      }
+      
+      // Get the widget type
+      const widgetType = await storage.getWidgetType(widget.widgetTypeId);
+      
+      // Return widget with widget type
+      res.json({
+        ...widget,
+        widgetType
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard widget:", error);
+      res.status(500).json({ message: "Error fetching dashboard widget" });
+    }
+  });
+  
+  // Create a new widget
+  app.post("/api/dashboard-widgets", isAuthenticated, async (req, res) => {
+    try {
+      const widgetData = req.body;
+      
+      // Verify the dashboard exists and belongs to the user
+      const dashboard = await storage.getDashboard(widgetData.dashboardId);
+      
+      if (!dashboard) {
+        return res.status(404).json({ message: "Dashboard not found" });
+      }
+      
+      if (dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to add widgets to this dashboard" });
+      }
+      
+      // Validate the data
+      const validatedData = insertDashboardWidgetSchema.parse(widgetData);
+      
+      // Create the widget
+      const widget = await storage.createDashboardWidget(validatedData);
+      
+      // Get the widget type
+      const widgetType = await storage.getWidgetType(widget.widgetTypeId);
+      
+      // Return widget with widget type
+      res.status(201).json({
+        ...widget,
+        widgetType
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating dashboard widget:", error);
+      res.status(500).json({ message: "Error creating dashboard widget" });
+    }
+  });
+  
+  // Update a widget
+  app.patch("/api/dashboard-widgets/:id", isAuthenticated, async (req, res) => {
+    try {
+      const widgetId = parseInt(req.params.id);
+      const widget = await storage.getDashboardWidget(widgetId);
+      
+      if (!widget) {
+        return res.status(404).json({ message: "Widget not found" });
+      }
+      
+      // Check if the user owns the dashboard this widget belongs to
+      const dashboard = await storage.getDashboard(widget.dashboardId);
+      
+      if (!dashboard || dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to update this widget" });
+      }
+      
+      const updatedWidget = await storage.updateDashboardWidget(widgetId, req.body);
+      
+      // Get the widget type
+      const widgetType = await storage.getWidgetType(updatedWidget.widgetTypeId);
+      
+      // Return updated widget with widget type
+      res.json({
+        ...updatedWidget,
+        widgetType
+      });
+    } catch (error) {
+      console.error("Error updating dashboard widget:", error);
+      res.status(500).json({ message: "Error updating dashboard widget" });
+    }
+  });
+  
+  // Delete a widget
+  app.delete("/api/dashboard-widgets/:id", isAuthenticated, async (req, res) => {
+    try {
+      const widgetId = parseInt(req.params.id);
+      const widget = await storage.getDashboardWidget(widgetId);
+      
+      if (!widget) {
+        return res.status(404).json({ message: "Widget not found" });
+      }
+      
+      // Check if the user owns the dashboard this widget belongs to
+      const dashboard = await storage.getDashboard(widget.dashboardId);
+      
+      if (!dashboard || dashboard.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to delete this widget" });
+      }
+      
+      const deleted = await storage.deleteDashboardWidget(widgetId);
+      
+      if (deleted) {
+        res.status(204).end();
+      } else {
+        res.status(500).json({ message: "Failed to delete widget" });
+      }
+    } catch (error) {
+      console.error("Error deleting dashboard widget:", error);
+      res.status(500).json({ message: "Error deleting dashboard widget" });
     }
   });
   

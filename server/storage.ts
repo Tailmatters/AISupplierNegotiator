@@ -5,8 +5,10 @@ import {
   ContractTemplate, InsertContractTemplate, Contract, InsertContract,
   SpendUpload, InsertSpendUpload, SpendData, InsertSpendData,
   ApiConnection, InsertApiConnection,
+  Dashboard, InsertDashboard, DashboardWidget, InsertDashboardWidget, WidgetType,
   users, suppliers, negotiations, messages, invitations, proposals,
-  contractTemplates, contracts, spendUploads, spendData, apiConnections
+  contractTemplates, contracts, spendUploads, spendData, apiConnections,
+  dashboards, dashboardWidgets, widgetTypes
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -106,6 +108,27 @@ export interface IStorage {
   getSpendByYear(userId: number): Promise<{ year: number, total: number }[]>;
   getTopSuppliers(userId: number, limit?: number): Promise<{ supplierId: number, supplierName: string, total: number }[]>;
   
+  // Dashboard operations
+  getAllWidgetTypes(): Promise<WidgetType[]>;
+  getWidgetTypesByCategory(category: string): Promise<WidgetType[]>;
+  getWidgetType(id: number): Promise<WidgetType | undefined>;
+  getWidgetTypeByType(type: string): Promise<WidgetType | undefined>;
+  
+  // Dashboard methods
+  getDashboard(id: number): Promise<Dashboard | undefined>;
+  getDashboardsByUser(userId: number): Promise<Dashboard[]>;
+  getUserDefaultDashboard(userId: number): Promise<Dashboard | undefined>;
+  createDashboard(dashboard: InsertDashboard): Promise<Dashboard>;
+  updateDashboard(id: number, dashboard: Partial<Dashboard>): Promise<Dashboard | undefined>;
+  deleteDashboard(id: number): Promise<boolean>;
+  
+  // Dashboard Widget methods
+  getDashboardWidget(id: number): Promise<DashboardWidget | undefined>;
+  getDashboardWidgetsByDashboard(dashboardId: number): Promise<DashboardWidget[]>;
+  createDashboardWidget(widget: InsertDashboardWidget): Promise<DashboardWidget>;
+  updateDashboardWidget(id: number, widget: Partial<DashboardWidget>): Promise<DashboardWidget | undefined>;
+  deleteDashboardWidget(id: number): Promise<boolean>;
+  
   // Session store
   sessionStore: any;
 }
@@ -122,6 +145,9 @@ export class MemStorage implements IStorage {
   private spendUploads: Map<number, SpendUpload>;
   private spendData: Map<number, SpendData>;
   private apiConnections: Map<number, ApiConnection>;
+  private widgetTypes: Map<number, WidgetType>;
+  private dashboards: Map<number, Dashboard>;
+  private dashboardWidgets: Map<number, DashboardWidget>;
   
   sessionStore: any;
   
@@ -137,6 +163,9 @@ export class MemStorage implements IStorage {
   private spendUploadIdCounter: number;
   private spendDataIdCounter: number;
   private apiConnectionIdCounter: number;
+  private widgetTypeIdCounter: number;
+  private dashboardIdCounter: number;
+  private dashboardWidgetIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -150,6 +179,9 @@ export class MemStorage implements IStorage {
     this.spendUploads = new Map();
     this.spendData = new Map();
     this.apiConnections = new Map();
+    this.widgetTypes = new Map();
+    this.dashboards = new Map();
+    this.dashboardWidgets = new Map();
     
     this.userIdCounter = 1;
     this.supplierIdCounter = 1;
@@ -162,6 +194,9 @@ export class MemStorage implements IStorage {
     this.spendUploadIdCounter = 1;
     this.spendDataIdCounter = 1;
     this.apiConnectionIdCounter = 1;
+    this.widgetTypeIdCounter = 1;
+    this.dashboardIdCounter = 1;
+    this.dashboardWidgetIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -763,6 +798,192 @@ export class MemStorage implements IStorage {
     return supplierSpendData.slice(0, limit);
   }
   
+  // Dashboard Widget Type methods
+  async getAllWidgetTypes(): Promise<WidgetType[]> {
+    return Array.from(this.widgetTypes.values())
+      .sort((a, b) => {
+        // First sort by category
+        if (a.category < b.category) return -1;
+        if (a.category > b.category) return 1;
+        // Then by name
+        return a.name.localeCompare(b.name);
+      });
+  }
+  
+  async getWidgetTypesByCategory(category: string): Promise<WidgetType[]> {
+    return Array.from(this.widgetTypes.values())
+      .filter((widgetType) => widgetType.category === category)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  
+  async getWidgetType(id: number): Promise<WidgetType | undefined> {
+    return this.widgetTypes.get(id);
+  }
+  
+  async getWidgetTypeByType(type: string): Promise<WidgetType | undefined> {
+    return Array.from(this.widgetTypes.values())
+      .find((widgetType) => widgetType.type === type);
+  }
+  
+  // Dashboard methods
+  async getDashboard(id: number): Promise<Dashboard | undefined> {
+    return this.dashboards.get(id);
+  }
+  
+  async getDashboardsByUser(userId: number): Promise<Dashboard[]> {
+    return Array.from(this.dashboards.values())
+      .filter((dashboard) => dashboard.userId === userId)
+      .sort((a, b) => {
+        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+        return aTime - bTime;
+      });
+  }
+  
+  async getUserDefaultDashboard(userId: number): Promise<Dashboard | undefined> {
+    // Try to find a default dashboard
+    const defaultDashboard = Array.from(this.dashboards.values())
+      .find((dashboard) => dashboard.userId === userId && dashboard.isDefault === true);
+      
+    if (defaultDashboard) {
+      return defaultDashboard;
+    }
+    
+    // If no default dashboard exists, return the first dashboard or create a new one
+    const userDashboards = await this.getDashboardsByUser(userId);
+    if (userDashboards.length > 0) {
+      return userDashboards[0];
+    }
+    
+    // Create a default dashboard for the user
+    return this.createDashboard({
+      userId,
+      name: "Default Dashboard",
+      isDefault: true,
+      layout: {}
+    });
+  }
+  
+  async createDashboard(insertDashboard: InsertDashboard): Promise<Dashboard> {
+    const id = this.dashboardIdCounter++;
+    const now = new Date();
+    const dashboard: Dashboard = {
+      ...insertDashboard,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      isDefault: insertDashboard.isDefault || false,
+      layout: insertDashboard.layout || {}
+    };
+    
+    // If this is set as default, ensure no other dashboard is default
+    if (dashboard.isDefault) {
+      for (const existingDashboard of await this.getDashboardsByUser(dashboard.userId)) {
+        if (existingDashboard.isDefault && existingDashboard.id !== dashboard.id) {
+          existingDashboard.isDefault = false;
+          this.dashboards.set(existingDashboard.id, existingDashboard);
+        }
+      }
+    }
+    
+    this.dashboards.set(id, dashboard);
+    return dashboard;
+  }
+  
+  async updateDashboard(id: number, dashboardUpdate: Partial<Dashboard>): Promise<Dashboard | undefined> {
+    const dashboard = this.dashboards.get(id);
+    if (!dashboard) return undefined;
+    
+    const now = new Date();
+    const updatedDashboard: Dashboard = {
+      ...dashboard,
+      ...dashboardUpdate,
+      updatedAt: now
+    };
+    
+    // If this is being set as default, update any other default dashboards
+    if (dashboardUpdate.isDefault === true) {
+      for (const existingDashboard of await this.getDashboardsByUser(dashboard.userId)) {
+        if (existingDashboard.isDefault && existingDashboard.id !== id) {
+          existingDashboard.isDefault = false;
+          this.dashboards.set(existingDashboard.id, existingDashboard);
+        }
+      }
+    }
+    
+    this.dashboards.set(id, updatedDashboard);
+    return updatedDashboard;
+  }
+  
+  async deleteDashboard(id: number): Promise<boolean> {
+    const dashboard = this.dashboards.get(id);
+    if (!dashboard) return false;
+    
+    this.dashboards.delete(id);
+    
+    // Delete associated widgets
+    for (const widget of await this.getDashboardWidgetsByDashboard(id)) {
+      this.dashboardWidgets.delete(widget.id);
+    }
+    
+    return true;
+  }
+  
+  // Dashboard Widget methods
+  async getDashboardWidget(id: number): Promise<DashboardWidget | undefined> {
+    return this.dashboardWidgets.get(id);
+  }
+  
+  async getDashboardWidgetsByDashboard(dashboardId: number): Promise<DashboardWidget[]> {
+    return Array.from(this.dashboardWidgets.values())
+      .filter((widget) => widget.dashboardId === dashboardId)
+      .sort((a, b) => a.position - b.position);
+  }
+  
+  async createDashboardWidget(insertWidget: InsertDashboardWidget): Promise<DashboardWidget> {
+    const id = this.dashboardWidgetIdCounter++;
+    const now = new Date();
+    const widget: DashboardWidget = {
+      ...insertWidget,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      title: insertWidget.title || null,
+      settings: insertWidget.settings || {},
+      position: insertWidget.position || 0,
+      width: insertWidget.width || 2,
+      height: insertWidget.height || 2,
+      x: insertWidget.x || null,
+      y: insertWidget.y || null
+    };
+    
+    this.dashboardWidgets.set(id, widget);
+    return widget;
+  }
+  
+  async updateDashboardWidget(id: number, widgetUpdate: Partial<DashboardWidget>): Promise<DashboardWidget | undefined> {
+    const widget = this.dashboardWidgets.get(id);
+    if (!widget) return undefined;
+    
+    const now = new Date();
+    const updatedWidget: DashboardWidget = {
+      ...widget,
+      ...widgetUpdate,
+      updatedAt: now
+    };
+    
+    this.dashboardWidgets.set(id, updatedWidget);
+    return updatedWidget;
+  }
+  
+  async deleteDashboardWidget(id: number): Promise<boolean> {
+    const widget = this.dashboardWidgets.get(id);
+    if (!widget) return false;
+    
+    this.dashboardWidgets.delete(id);
+    return true;
+  }
+  
   // Initialize sample data
   private initializeSampleData() {
     // This is demo data for the UI to show something
@@ -777,6 +998,129 @@ export class MemStorage implements IStorage {
       "Cloud Services",
       "Professional Services"
     ];
+    
+    // Sample widget types
+    const now = new Date();
+    const sampleWidgetTypes = [
+      {
+        id: 1,
+        type: "spend_by_category",
+        name: "Spend by Category",
+        description: "Displays spend data by category in a pie chart",
+        category: "Spend Analysis",
+        icon: "PieChart",
+        createdAt: now,
+        defaultHeight: 2,
+        defaultWidth: 2,
+        minHeight: 1,
+        minWidth: 1,
+        maxHeight: 4,
+        maxWidth: 4,
+        availableSettings: { timeRange: ["year", "quarter", "month"] }
+      },
+      {
+        id: 2,
+        type: "spend_by_supplier",
+        name: "Spend by Supplier",
+        description: "Displays spend data by supplier in a bar chart",
+        category: "Spend Analysis",
+        icon: "BarChart",
+        createdAt: now,
+        defaultHeight: 2,
+        defaultWidth: 2,
+        minHeight: 1,
+        minWidth: 1,
+        maxHeight: 4,
+        maxWidth: 4,
+        availableSettings: { timeRange: ["year", "quarter", "month"] }
+      },
+      {
+        id: 3,
+        type: "spend_trend",
+        name: "Spend Trend",
+        description: "Displays spend trends over time in a line chart",
+        category: "Spend Analysis",
+        icon: "LineChart",
+        createdAt: now,
+        defaultHeight: 2,
+        defaultWidth: 3,
+        minHeight: 1,
+        minWidth: 2,
+        maxHeight: 4,
+        maxWidth: 4,
+        availableSettings: { timeRange: ["year", "quarter", "month"] }
+      },
+      {
+        id: 4,
+        type: "top_suppliers",
+        name: "Top Suppliers",
+        description: "Displays top suppliers by spend in a table",
+        category: "Spend Analysis",
+        icon: "Table",
+        createdAt: now,
+        defaultHeight: 3,
+        defaultWidth: 2,
+        minHeight: 2,
+        minWidth: 2,
+        maxHeight: 6,
+        maxWidth: 4,
+        availableSettings: { limit: [5, 10, 15, 20] }
+      },
+      {
+        id: 5,
+        type: "active_negotiations",
+        name: "Active Negotiations",
+        description: "Displays current active negotiations",
+        category: "Negotiations",
+        icon: "MessageSquare",
+        createdAt: now,
+        defaultHeight: 2,
+        defaultWidth: 2,
+        minHeight: 1,
+        minWidth: 1,
+        maxHeight: 4,
+        maxWidth: 4,
+        availableSettings: { status: ["active", "pending", "completed"] }
+      },
+      {
+        id: 6,
+        type: "pending_contract_approvals",
+        name: "Pending Contract Approvals",
+        description: "Displays contracts pending approval",
+        category: "Contracts",
+        icon: "FileText",
+        createdAt: now,
+        defaultHeight: 2,
+        defaultWidth: 2,
+        minHeight: 1,
+        minWidth: 1,
+        maxHeight: 4,
+        maxWidth: 4,
+        availableSettings: { status: ["pending", "approved", "all"] }
+      },
+      {
+        id: 7,
+        type: "supplier_status",
+        name: "Supplier Status",
+        description: "Displays supplier status by category",
+        category: "Suppliers",
+        icon: "Users",
+        createdAt: now,
+        defaultHeight: 2,
+        defaultWidth: 2,
+        minHeight: 1,
+        minWidth: 1,
+        maxHeight: 4,
+        maxWidth: 3,
+        availableSettings: { status: ["active", "inactive", "all"] }
+      }
+    ];
+    
+    // Initialize widget types
+    sampleWidgetTypes.forEach(widgetType => {
+      this.widgetTypes.set(widgetType.id, widgetType);
+      this.widgetTypeIdCounter = Math.max(this.widgetTypeIdCounter, widgetType.id + 1);
+    });
     
     // Sample suppliers
     const sampleSuppliers: InsertSupplier[] = [
@@ -1374,6 +1718,174 @@ export class DatabaseStorage implements IStorage {
       .where(eq(contracts.id, id))
       .returning();
     return updatedContract;
+  }
+  
+  // Dashboard Widget Type methods
+  async getAllWidgetTypes(): Promise<WidgetType[]> {
+    return db.select().from(widgetTypes).orderBy(widgetTypes.category, widgetTypes.name);
+  }
+  
+  async getWidgetTypesByCategory(category: string): Promise<WidgetType[]> {
+    return db.select().from(widgetTypes).where(eq(widgetTypes.category, category)).orderBy(widgetTypes.name);
+  }
+  
+  async getWidgetType(id: number): Promise<WidgetType | undefined> {
+    const [widgetType] = await db.select().from(widgetTypes).where(eq(widgetTypes.id, id));
+    return widgetType;
+  }
+  
+  async getWidgetTypeByType(type: string): Promise<WidgetType | undefined> {
+    const [widgetType] = await db.select().from(widgetTypes).where(eq(widgetTypes.type, type));
+    return widgetType;
+  }
+  
+  // Dashboard methods
+  async getDashboard(id: number): Promise<Dashboard | undefined> {
+    const [dashboard] = await db.select().from(dashboards).where(eq(dashboards.id, id));
+    return dashboard;
+  }
+  
+  async getDashboardsByUser(userId: number): Promise<Dashboard[]> {
+    return db.select().from(dashboards).where(eq(dashboards.userId, userId)).orderBy(dashboards.createdAt);
+  }
+  
+  async getUserDefaultDashboard(userId: number): Promise<Dashboard | undefined> {
+    const [dashboard] = await db.select()
+      .from(dashboards)
+      .where(and(
+        eq(dashboards.userId, userId),
+        eq(dashboards.isDefault, true)
+      ));
+      
+    if (dashboard) {
+      return dashboard;
+    }
+    
+    // If no default dashboard exists, return the first dashboard or create a new one
+    const userDashboards = await this.getDashboardsByUser(userId);
+    if (userDashboards.length > 0) {
+      return userDashboards[0];
+    }
+    
+    // Create a default dashboard for the user
+    return this.createDashboard({
+      userId,
+      name: "Default Dashboard",
+      isDefault: true,
+      layout: {}
+    });
+  }
+  
+  async createDashboard(insertDashboard: InsertDashboard): Promise<Dashboard> {
+    const now = new Date();
+    const [dashboard] = await db.insert(dashboards)
+      .values({
+        ...insertDashboard,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+      
+    // If this is set as default, ensure no other dashboard is default
+    if (dashboard.isDefault) {
+      await db.update(dashboards)
+        .set({ isDefault: false })
+        .where(and(
+          eq(dashboards.userId, dashboard.userId),
+          not(eq(dashboards.id, dashboard.id)),
+          eq(dashboards.isDefault, true)
+        ));
+    }
+    
+    return dashboard;
+  }
+  
+  async updateDashboard(id: number, dashboardUpdate: Partial<Dashboard>): Promise<Dashboard | undefined> {
+    // First check if the dashboard exists
+    const dashboard = await this.getDashboard(id);
+    if (!dashboard) return undefined;
+    
+    const now = new Date();
+    const [updatedDashboard] = await db.update(dashboards)
+      .set({ 
+        ...dashboardUpdate,
+        updatedAt: now
+      })
+      .where(eq(dashboards.id, id))
+      .returning();
+      
+    // If this is being set as default, update any other default dashboards
+    if (dashboardUpdate.isDefault === true) {
+      await db.update(dashboards)
+        .set({ isDefault: false })
+        .where(and(
+          eq(dashboards.userId, dashboard.userId),
+          not(eq(dashboards.id, id)),
+          eq(dashboards.isDefault, true)
+        ));
+    }
+    
+    return updatedDashboard;
+  }
+  
+  async deleteDashboard(id: number): Promise<boolean> {
+    // Check if the dashboard exists
+    const dashboard = await this.getDashboard(id);
+    if (!dashboard) return false;
+    
+    await db.delete(dashboards).where(eq(dashboards.id, id));
+    return true;
+  }
+  
+  // Dashboard Widget methods
+  async getDashboardWidget(id: number): Promise<DashboardWidget | undefined> {
+    const [widget] = await db.select().from(dashboardWidgets).where(eq(dashboardWidgets.id, id));
+    return widget;
+  }
+  
+  async getDashboardWidgetsByDashboard(dashboardId: number): Promise<DashboardWidget[]> {
+    return db.select().from(dashboardWidgets)
+      .where(eq(dashboardWidgets.dashboardId, dashboardId))
+      .orderBy(dashboardWidgets.position);
+  }
+  
+  async createDashboardWidget(insertWidget: InsertDashboardWidget): Promise<DashboardWidget> {
+    const now = new Date();
+    const [widget] = await db.insert(dashboardWidgets)
+      .values({
+        ...insertWidget,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    
+    return widget;
+  }
+  
+  async updateDashboardWidget(id: number, widgetUpdate: Partial<DashboardWidget>): Promise<DashboardWidget | undefined> {
+    // Check if the widget exists
+    const widget = await this.getDashboardWidget(id);
+    if (!widget) return undefined;
+    
+    const now = new Date();
+    const [updatedWidget] = await db.update(dashboardWidgets)
+      .set({ 
+        ...widgetUpdate,
+        updatedAt: now
+      })
+      .where(eq(dashboardWidgets.id, id))
+      .returning();
+    
+    return updatedWidget;
+  }
+  
+  async deleteDashboardWidget(id: number): Promise<boolean> {
+    // Check if the widget exists
+    const widget = await this.getDashboardWidget(id);
+    if (!widget) return false;
+    
+    await db.delete(dashboardWidgets).where(eq(dashboardWidgets.id, id));
+    return true;
   }
 }
 
