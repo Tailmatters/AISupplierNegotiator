@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json, decimal, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -106,6 +106,57 @@ export const proposals = pgTable("proposals", {
   metadata: json("metadata"), // Any additional data
 });
 
+// Spend data tables for spend analysis functionality
+export const spendUploads = pgTable("spend_uploads", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  fileType: text("file_type").notNull(),
+  recordCount: integer("record_count").notNull().default(0),
+  status: text("status").notNull().default("processing"), // processing, completed, failed
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  processingCompletedAt: timestamp("processing_completed_at"),
+  source: text("source").notNull().default("csv_upload"), // csv_upload, sap_api, coupa_api, etc.
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+});
+
+export const spendData = pgTable("spend_data", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  supplierId: integer("supplier_id").references(() => suppliers.id),
+  supplierName: text("supplier_name").notNull(), // Fallback for suppliers not in the system
+  category: text("category").notNull(),
+  subcategory: text("subcategory"),
+  spendAmount: decimal("spend_amount", { precision: 15, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  quantity: decimal("quantity", { precision: 15, scale: 2 }),
+  unitPrice: decimal("unit_price", { precision: 15, scale: 2 }),
+  itemDescription: text("item_description"),
+  departmentId: text("department_id"),
+  departmentName: text("department_name"),
+  invoiceNumber: text("invoice_number"),
+  poNumber: text("po_number"),
+  transactionDate: timestamp("transaction_date").notNull(),
+  uploadId: integer("upload_id").references(() => spendUploads.id),
+  dataSource: text("data_source").notNull().default("csv_upload"), // csv_upload, sap_api, coupa_api, etc.
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const apiConnections = pgTable("api_connections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(), // SAP, Coupa, Ariba, etc.
+  type: text("type").notNull(), // erp, procurement, etc.
+  status: text("status").notNull().default("active"),
+  credentials: jsonb("credentials"), // Securely stored API credentials
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  metadata: jsonb("metadata"),
+});
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -211,14 +262,69 @@ export type ContractTemplate = typeof contractTemplates.$inferSelect;
 export type InsertContract = z.infer<typeof insertContractSchema>;
 export type Contract = typeof contracts.$inferSelect;
 
+// Add schemas for spend analysis tables
+export const insertSpendUploadSchema = createInsertSchema(spendUploads).pick({
+  userId: true,
+  fileName: true,
+  fileSize: true,
+  fileType: true,
+  recordCount: true,
+  status: true,
+  source: true,
+  errorMessage: true,
+  metadata: true,
+});
+
+export const insertSpendDataSchema = createInsertSchema(spendData).pick({
+  userId: true,
+  supplierId: true,
+  supplierName: true,
+  category: true,
+  subcategory: true,
+  spendAmount: true,
+  currency: true,
+  quantity: true,
+  unitPrice: true,
+  itemDescription: true,
+  departmentId: true,
+  departmentName: true,
+  invoiceNumber: true,
+  poNumber: true,
+  transactionDate: true,
+  uploadId: true,
+  dataSource: true,
+});
+
+export const insertApiConnectionSchema = createInsertSchema(apiConnections).pick({
+  userId: true,
+  name: true,
+  type: true,
+  status: true,
+  credentials: true,
+  metadata: true,
+});
+
+export type InsertSpendUpload = z.infer<typeof insertSpendUploadSchema>;
+export type SpendUpload = typeof spendUploads.$inferSelect;
+
+export type InsertSpendData = z.infer<typeof insertSpendDataSchema>;
+export type SpendData = typeof spendData.$inferSelect;
+
+export type InsertApiConnection = z.infer<typeof insertApiConnectionSchema>;
+export type ApiConnection = typeof apiConnections.$inferSelect;
+
 // Define relations between tables
 export const usersRelations = relations(users, ({ many }) => ({
   negotiations: many(negotiations),
+  spendUploads: many(spendUploads),
+  spendData: many(spendData),
+  apiConnections: many(apiConnections),
 }));
 
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   negotiations: many(negotiations),
   invitations: many(invitations),
+  spendData: many(spendData),
 }));
 
 export const negotiationsRelations = relations(negotiations, ({ one, many }) => ({
@@ -287,5 +393,36 @@ export const contractsRelations = relations(contracts, ({ one }) => ({
   template: one(contractTemplates, {
     fields: [contracts.templateId],
     references: [contractTemplates.id],
+  }),
+}));
+
+// Relations for spend analysis tables
+export const spendUploadsRelations = relations(spendUploads, ({ one, many }) => ({
+  user: one(users, {
+    fields: [spendUploads.userId],
+    references: [users.id],
+  }),
+  spendData: many(spendData),
+}));
+
+export const spendDataRelations = relations(spendData, ({ one }) => ({
+  user: one(users, {
+    fields: [spendData.userId],
+    references: [users.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [spendData.supplierId],
+    references: [suppliers.id],
+  }),
+  upload: one(spendUploads, {
+    fields: [spendData.uploadId],
+    references: [spendUploads.id],
+  }),
+}));
+
+export const apiConnectionsRelations = relations(apiConnections, ({ one }) => ({
+  user: one(users, {
+    fields: [apiConnections.userId],
+    references: [users.id],
   }),
 }));

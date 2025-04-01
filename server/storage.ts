@@ -3,14 +3,16 @@ import {
   Negotiation, InsertNegotiation, Message, InsertMessage,
   Invitation, InsertInvitation, Proposal, InsertProposal,
   ContractTemplate, InsertContractTemplate, Contract, InsertContract,
+  SpendUpload, InsertSpendUpload, SpendData, InsertSpendData,
+  ApiConnection, InsertApiConnection,
   users, suppliers, negotiations, messages, invitations, proposals,
-  contractTemplates, contracts
+  contractTemplates, contracts, spendUploads, spendData, apiConnections
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, desc, not } from "drizzle-orm";
+import { eq, and, desc, not, sql } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import pkg from "pg";
 const { Pool } = pkg;
@@ -74,6 +76,36 @@ export interface IStorage {
   createContract(contract: InsertContract): Promise<Contract>;
   updateContract(id: number, contract: Partial<Contract>): Promise<Contract | undefined>;
   
+  // Spend Analysis operations
+  // SpendUpload operations
+  getSpendUpload(id: number): Promise<SpendUpload | undefined>;
+  getSpendUploadsByUser(userId: number): Promise<SpendUpload[]>;
+  createSpendUpload(upload: InsertSpendUpload): Promise<SpendUpload>;
+  updateSpendUpload(id: number, upload: Partial<SpendUpload>): Promise<SpendUpload | undefined>;
+
+  // SpendData operations
+  getSpendData(id: number): Promise<SpendData | undefined>;
+  getSpendDataByUpload(uploadId: number): Promise<SpendData[]>;
+  getSpendDataByUser(userId: number): Promise<SpendData[]>;
+  getSpendDataBySupplier(supplierId: number): Promise<SpendData[]>;
+  getSpendDataByCategory(userId: number, category: string): Promise<SpendData[]>;
+  getSpendDataByDateRange(userId: number, startDate: Date, endDate: Date): Promise<SpendData[]>;
+  createSpendData(data: InsertSpendData): Promise<SpendData>;
+  createManySpendData(dataItems: InsertSpendData[]): Promise<SpendData[]>;
+  
+  // API Connections operations
+  getApiConnection(id: number): Promise<ApiConnection | undefined>;
+  getApiConnectionsByUser(userId: number): Promise<ApiConnection[]>;
+  createApiConnection(connection: InsertApiConnection): Promise<ApiConnection>;
+  updateApiConnection(id: number, connection: Partial<ApiConnection>): Promise<ApiConnection | undefined>;
+  deleteApiConnection(id: number): Promise<boolean>;
+
+  // Summary and Analysis operations
+  getSpendBySupplier(userId: number, year?: number): Promise<{ supplierId: number, supplierName: string, total: number }[]>;
+  getSpendByCategory(userId: number, year?: number): Promise<{ category: string, total: number }[]>;
+  getSpendByYear(userId: number): Promise<{ year: number, total: number }[]>;
+  getTopSuppliers(userId: number, limit?: number): Promise<{ supplierId: number, supplierName: string, total: number }[]>;
+  
   // Session store
   sessionStore: any;
 }
@@ -87,6 +119,9 @@ export class MemStorage implements IStorage {
   private proposals: Map<number, Proposal>;
   private contractTemplates: Map<number, ContractTemplate>;
   private contracts: Map<number, Contract>;
+  private spendUploads: Map<number, SpendUpload>;
+  private spendData: Map<number, SpendData>;
+  private apiConnections: Map<number, ApiConnection>;
   
   sessionStore: any;
   
@@ -99,6 +134,9 @@ export class MemStorage implements IStorage {
   private proposalIdCounter: number;
   private contractTemplateIdCounter: number;
   private contractIdCounter: number;
+  private spendUploadIdCounter: number;
+  private spendDataIdCounter: number;
+  private apiConnectionIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -109,6 +147,9 @@ export class MemStorage implements IStorage {
     this.proposals = new Map();
     this.contractTemplates = new Map();
     this.contracts = new Map();
+    this.spendUploads = new Map();
+    this.spendData = new Map();
+    this.apiConnections = new Map();
     
     this.userIdCounter = 1;
     this.supplierIdCounter = 1;
@@ -118,6 +159,9 @@ export class MemStorage implements IStorage {
     this.proposalIdCounter = 1;
     this.contractTemplateIdCounter = 1;
     this.contractIdCounter = 1;
+    this.spendUploadIdCounter = 1;
+    this.spendDataIdCounter = 1;
+    this.apiConnectionIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -474,6 +518,251 @@ export class MemStorage implements IStorage {
     return updatedContract;
   }
   
+  // SpendUpload operations
+  async getSpendUpload(id: number): Promise<SpendUpload | undefined> {
+    return this.spendUploads.get(id);
+  }
+
+  async getSpendUploadsByUser(userId: number): Promise<SpendUpload[]> {
+    return Array.from(this.spendUploads.values()).filter(
+      (upload) => upload.userId === userId
+    );
+  }
+
+  async createSpendUpload(insertUpload: InsertSpendUpload): Promise<SpendUpload> {
+    const id = this.spendUploadIdCounter++;
+    const now = new Date();
+    const upload: SpendUpload = {
+      ...insertUpload,
+      id,
+      uploadedAt: now,
+      processingCompletedAt: null,
+      status: insertUpload.status || "processing",
+      recordCount: insertUpload.recordCount || 0,
+      errorMessage: insertUpload.errorMessage || null,
+      metadata: insertUpload.metadata || null,
+      source: insertUpload.source || "manual" // Ensure source is not undefined
+    };
+    this.spendUploads.set(id, upload);
+    return upload;
+  }
+
+  async updateSpendUpload(id: number, uploadUpdate: Partial<SpendUpload>): Promise<SpendUpload | undefined> {
+    const upload = this.spendUploads.get(id);
+    if (!upload) return undefined;
+
+    const updatedUpload = { ...upload, ...uploadUpdate };
+    this.spendUploads.set(id, updatedUpload);
+    return updatedUpload;
+  }
+
+  // SpendData operations
+  async getSpendData(id: number): Promise<SpendData | undefined> {
+    return this.spendData.get(id);
+  }
+
+  async getSpendDataByUpload(uploadId: number): Promise<SpendData[]> {
+    return Array.from(this.spendData.values()).filter(
+      (spendData) => spendData.uploadId === uploadId
+    );
+  }
+
+  async getSpendDataByUser(userId: number): Promise<SpendData[]> {
+    return Array.from(this.spendData.values()).filter(
+      (spendData) => spendData.userId === userId
+    );
+  }
+
+  async getSpendDataBySupplier(supplierId: number): Promise<SpendData[]> {
+    return Array.from(this.spendData.values()).filter(
+      (spendData) => spendData.supplierId === supplierId
+    );
+  }
+
+  async getSpendDataByCategory(userId: number, category: string): Promise<SpendData[]> {
+    return Array.from(this.spendData.values()).filter(
+      (spendData) => spendData.userId === userId && spendData.category === category
+    );
+  }
+
+  async getSpendDataByDateRange(userId: number, startDate: Date, endDate: Date): Promise<SpendData[]> {
+    return Array.from(this.spendData.values()).filter(
+      (spendData) => {
+        return spendData.userId === userId && 
+               spendData.transactionDate >= startDate && 
+               spendData.transactionDate <= endDate;
+      }
+    );
+  }
+
+  async createSpendData(insertData: InsertSpendData): Promise<SpendData> {
+    const id = this.spendDataIdCounter++;
+    const now = new Date();
+    
+    // Create a properly typed SpendData object with defaults for all required fields
+    const spendData: SpendData = {
+      ...insertData,
+      id,
+      createdAt: now,
+      // Required fields with defaults if not provided
+      category: insertData.category,
+      userId: insertData.userId,
+      supplierName: insertData.supplierName,
+      spendAmount: insertData.spendAmount,
+      transactionDate: insertData.transactionDate,
+      currency: insertData.currency || "USD",
+      dataSource: insertData.dataSource || "manual",
+      // Optional fields with null defaults
+      supplierId: insertData.supplierId || null,
+      subcategory: insertData.subcategory || null,
+      quantity: insertData.quantity || null,
+      unitPrice: insertData.unitPrice || null,
+      poNumber: insertData.poNumber || null,
+      invoiceNumber: insertData.invoiceNumber || null,
+      uploadId: insertData.uploadId || null,
+      itemDescription: insertData.itemDescription || null,
+      departmentId: insertData.departmentId || null,
+      departmentName: insertData.departmentName || null
+    };
+    
+    this.spendData.set(id, spendData);
+    return spendData;
+  }
+
+  async createManySpendData(dataItems: InsertSpendData[]): Promise<SpendData[]> {
+    const createdItems: SpendData[] = [];
+    for (const item of dataItems) {
+      const createdItem = await this.createSpendData(item);
+      createdItems.push(createdItem);
+    }
+    return createdItems;
+  }
+
+  // API Connections operations
+  async getApiConnection(id: number): Promise<ApiConnection | undefined> {
+    return this.apiConnections.get(id);
+  }
+
+  async getApiConnectionsByUser(userId: number): Promise<ApiConnection[]> {
+    return Array.from(this.apiConnections.values()).filter(
+      (connection) => connection.userId === userId
+    );
+  }
+
+  async createApiConnection(insertConnection: InsertApiConnection): Promise<ApiConnection> {
+    const id = this.apiConnectionIdCounter++;
+    const now = new Date();
+    const connection: ApiConnection = {
+      ...insertConnection,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      lastSyncAt: null,
+      status: insertConnection.status || "active",
+      metadata: insertConnection.metadata || null,
+      credentials: insertConnection.credentials || {}
+    };
+    this.apiConnections.set(id, connection);
+    return connection;
+  }
+
+  async updateApiConnection(id: number, connectionUpdate: Partial<ApiConnection>): Promise<ApiConnection | undefined> {
+    const connection = this.apiConnections.get(id);
+    if (!connection) return undefined;
+
+    const updatedConnection = { 
+      ...connection, 
+      ...connectionUpdate,
+      updatedAt: new Date() 
+    };
+    this.apiConnections.set(id, updatedConnection);
+    return updatedConnection;
+  }
+
+  async deleteApiConnection(id: number): Promise<boolean> {
+    return this.apiConnections.delete(id);
+  }
+
+  // Summary and Analysis operations
+  async getSpendBySupplier(userId: number, year?: number): Promise<{ supplierId: number, supplierName: string, total: number }[]> {
+    const userSpendData = await this.getSpendDataByUser(userId);
+    
+    // Filter by year if provided
+    const filteredData = year 
+      ? userSpendData.filter(data => new Date(data.transactionDate).getFullYear() === year)
+      : userSpendData;
+    
+    // Group by supplier and sum totals
+    const supplierMap = new Map<number | string, { supplierId: number | null, supplierName: string, total: number }>();
+    
+    for (const data of filteredData) {
+      const key = data.supplierId || data.supplierName;
+      const existing = supplierMap.get(key) || { 
+        supplierId: data.supplierId || null, 
+        supplierName: data.supplierName, 
+        total: 0 
+      };
+      
+      existing.total += Number(data.spendAmount);
+      supplierMap.set(key, existing);
+    }
+    
+    // Convert to array and sort by total spending (descending)
+    return Array.from(supplierMap.values())
+      .filter(item => item.supplierId !== null)
+      .map(item => ({ 
+        supplierId: item.supplierId as number, 
+        supplierName: item.supplierName, 
+        total: item.total 
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  async getSpendByCategory(userId: number, year?: number): Promise<{ category: string, total: number }[]> {
+    const userSpendData = await this.getSpendDataByUser(userId);
+    
+    // Filter by year if provided
+    const filteredData = year 
+      ? userSpendData.filter(data => new Date(data.transactionDate).getFullYear() === year)
+      : userSpendData;
+    
+    // Group by category and sum totals
+    const categoryMap = new Map<string, number>();
+    
+    for (const data of filteredData) {
+      const existing = categoryMap.get(data.category) || 0;
+      categoryMap.set(data.category, existing + Number(data.spendAmount));
+    }
+    
+    // Convert to array and sort by total spending (descending)
+    return Array.from(categoryMap.entries())
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  async getSpendByYear(userId: number): Promise<{ year: number, total: number }[]> {
+    const userSpendData = await this.getSpendDataByUser(userId);
+    
+    // Group by year and sum totals
+    const yearMap = new Map<number, number>();
+    
+    for (const data of userSpendData) {
+      const year = new Date(data.transactionDate).getFullYear();
+      const existing = yearMap.get(year) || 0;
+      yearMap.set(year, existing + Number(data.spendAmount));
+    }
+    
+    // Convert to array and sort by year (ascending)
+    return Array.from(yearMap.entries())
+      .map(([year, total]) => ({ year, total }))
+      .sort((a, b) => a.year - b.year);
+  }
+
+  async getTopSuppliers(userId: number, limit: number = 10): Promise<{ supplierId: number, supplierName: string, total: number }[]> {
+    const supplierSpendData = await this.getSpendBySupplier(userId);
+    return supplierSpendData.slice(0, limit);
+  }
+  
   // Initialize sample data
   private initializeSampleData() {
     // This is demo data for the UI to show something
@@ -544,6 +833,249 @@ export class DatabaseStorage implements IStorage {
       pool,
       createTableIfMissing: true
     });
+  }
+  
+  // SpendUpload operations
+  async getSpendUpload(id: number): Promise<SpendUpload | undefined> {
+    const [upload] = await db.select().from(spendUploads).where(eq(spendUploads.id, id));
+    return upload;
+  }
+
+  async getSpendUploadsByUser(userId: number): Promise<SpendUpload[]> {
+    return db
+      .select()
+      .from(spendUploads)
+      .where(eq(spendUploads.userId, userId))
+      .orderBy(desc(spendUploads.uploadedAt));
+  }
+
+  async createSpendUpload(insertUpload: InsertSpendUpload): Promise<SpendUpload> {
+    const [upload] = await db.insert(spendUploads).values(insertUpload).returning();
+    return upload;
+  }
+
+  async updateSpendUpload(id: number, uploadUpdate: Partial<SpendUpload>): Promise<SpendUpload | undefined> {
+    const [updatedUpload] = await db
+      .update(spendUploads)
+      .set(uploadUpdate)
+      .where(eq(spendUploads.id, id))
+      .returning();
+    return updatedUpload;
+  }
+
+  // SpendData operations
+  async getSpendData(id: number): Promise<SpendData | undefined> {
+    const [data] = await db.select().from(spendData).where(eq(spendData.id, id));
+    return data;
+  }
+
+  async getSpendDataByUpload(uploadId: number): Promise<SpendData[]> {
+    return db
+      .select()
+      .from(spendData)
+      .where(eq(spendData.uploadId, uploadId));
+  }
+
+  async getSpendDataByUser(userId: number): Promise<SpendData[]> {
+    return db
+      .select()
+      .from(spendData)
+      .where(eq(spendData.userId, userId));
+  }
+
+  async getSpendDataBySupplier(supplierId: number): Promise<SpendData[]> {
+    return db
+      .select()
+      .from(spendData)
+      .where(eq(spendData.supplierId, supplierId));
+  }
+
+  async getSpendDataByCategory(userId: number, category: string): Promise<SpendData[]> {
+    return db
+      .select()
+      .from(spendData)
+      .where(and(
+        eq(spendData.userId, userId),
+        eq(spendData.category, category)
+      ));
+  }
+
+  async getSpendDataByDateRange(userId: number, startDate: Date, endDate: Date): Promise<SpendData[]> {
+    return db
+      .select()
+      .from(spendData)
+      .where(and(
+        eq(spendData.userId, userId),
+        // Use SQL functions as Drizzle columns might not have gte/lte methods
+        sql`${spendData.transactionDate} >= ${startDate}`,
+        sql`${spendData.transactionDate} <= ${endDate}`
+      ));
+  }
+
+  async createSpendData(insertData: InsertSpendData): Promise<SpendData> {
+    const [data] = await db.insert(spendData).values(insertData).returning();
+    return data;
+  }
+
+  async createManySpendData(dataItems: InsertSpendData[]): Promise<SpendData[]> {
+    return db.insert(spendData).values(dataItems).returning();
+  }
+
+  // API Connections operations
+  async getApiConnection(id: number): Promise<ApiConnection | undefined> {
+    const [connection] = await db.select().from(apiConnections).where(eq(apiConnections.id, id));
+    return connection;
+  }
+
+  async getApiConnectionsByUser(userId: number): Promise<ApiConnection[]> {
+    return db
+      .select()
+      .from(apiConnections)
+      .where(eq(apiConnections.userId, userId));
+  }
+
+  async createApiConnection(insertConnection: InsertApiConnection): Promise<ApiConnection> {
+    const [connection] = await db.insert(apiConnections).values(insertConnection).returning();
+    return connection;
+  }
+
+  async updateApiConnection(id: number, connectionUpdate: Partial<ApiConnection>): Promise<ApiConnection | undefined> {
+    // Always update the updatedAt field to current time
+    const updatedConnectionData = {
+      ...connectionUpdate,
+      updatedAt: new Date()
+    };
+    
+    const [updatedConnection] = await db
+      .update(apiConnections)
+      .set(updatedConnectionData)
+      .where(eq(apiConnections.id, id))
+      .returning();
+    return updatedConnection;
+  }
+
+  async deleteApiConnection(id: number): Promise<boolean> {
+    // Note: Drizzle doesn't return a boolean, so we have to check if any rows were affected
+    const result = await db
+      .delete(apiConnections)
+      .where(eq(apiConnections.id, id));
+    return !!result;
+  }
+
+  // Summary and Analysis operations
+  async getSpendBySupplier(userId: number, year?: number): Promise<{ supplierId: number, supplierName: string, total: number }[]> {
+    let baseQuery = db
+      .select({
+        supplierId: spendData.supplierId,
+        supplierName: spendData.supplierName,
+        total: sql<number>`sum(${spendData.spendAmount})`,
+      })
+      .from(spendData)
+      .where(eq(spendData.userId, userId));
+    
+    // Create conditions array
+    const conditions = [eq(spendData.userId, userId)];
+    
+    // Add year condition if specified
+    if (year) {
+      conditions.push(sql`EXTRACT(YEAR FROM ${spendData.transactionDate}) = ${year}`);
+    }
+    
+    // Add non-null supplier condition
+    conditions.push(not(sql`${spendData.supplierId} IS NULL`));
+    
+    // Execute query with all conditions
+    const results = await db
+      .select({
+        supplierId: spendData.supplierId,
+        supplierName: spendData.supplierName,
+        total: sql<number>`sum(${spendData.spendAmount})`,
+      })
+      .from(spendData)
+      .where(and(...conditions))
+      .groupBy(spendData.supplierId, spendData.supplierName)
+      .orderBy(sql`sum(${spendData.spendAmount})` as any, 'desc');
+    
+    // Ensure we only return results with non-null supplierId to match the return type
+    return results
+      .filter(item => item.supplierId !== null)
+      .map(item => ({
+        supplierId: item.supplierId as number,
+        supplierName: item.supplierName,
+        total: Number(item.total)
+      }));
+  }
+
+  async getSpendByCategory(userId: number, year?: number): Promise<{ category: string, total: number }[]> {
+    // Create conditions array
+    const conditions = [eq(spendData.userId, userId)];
+    
+    // Add year condition if specified
+    if (year) {
+      conditions.push(sql`EXTRACT(YEAR FROM ${spendData.transactionDate}) = ${year}`);
+    }
+    
+    // Execute query with all conditions
+    const results = await db
+      .select({
+        category: spendData.category,
+        total: sql<number>`sum(${spendData.spendAmount})`,
+      })
+      .from(spendData)
+      .where(and(...conditions))
+      .groupBy(spendData.category)
+      .orderBy(sql`sum(${spendData.spendAmount})` as any, 'desc');
+    
+    // Convert any string totals to numbers to ensure type consistency
+    return results.map(item => ({
+      category: item.category,
+      total: Number(item.total)
+    }));
+  }
+
+  async getSpendByYear(userId: number): Promise<{ year: number, total: number }[]> {
+    const results = await db
+      .select({
+        year: sql<number>`EXTRACT(YEAR FROM ${spendData.transactionDate})`,
+        total: sql<number>`sum(${spendData.spendAmount})`,
+      })
+      .from(spendData)
+      .where(eq(spendData.userId, userId))
+      .groupBy(sql`EXTRACT(YEAR FROM ${spendData.transactionDate})`)
+      .orderBy(sql`EXTRACT(YEAR FROM ${spendData.transactionDate})` as any);
+      
+    // Convert any string totals to numbers and ensure year is a number
+    return results.map(item => ({
+      year: Number(item.year),
+      total: Number(item.total)
+    }));
+  }
+
+  async getTopSuppliers(userId: number, limit: number = 10): Promise<{ supplierId: number, supplierName: string, total: number }[]> {
+    // Execute query
+    const results = await db
+      .select({
+        supplierId: spendData.supplierId,
+        supplierName: spendData.supplierName,
+        total: sql<number>`sum(${spendData.spendAmount})`,
+      })
+      .from(spendData)
+      .where(and(
+        eq(spendData.userId, userId),
+        not(sql`${spendData.supplierId} IS NULL`)
+      ))
+      .groupBy(spendData.supplierId, spendData.supplierName)
+      .orderBy(sql`sum(${spendData.spendAmount})` as any, 'desc')
+      .limit(limit);
+
+    // Filter out any results with null supplierId and convert to the expected format
+    return results
+      .filter(item => item.supplierId !== null)
+      .map(item => ({
+        supplierId: item.supplierId as number,
+        supplierName: item.supplierName,
+        total: Number(item.total)
+      }));
   }
 
   // User operations
