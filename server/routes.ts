@@ -23,7 +23,7 @@ const __dirname = dirname(__filename);
 import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx';
 
 const isAuthenticated = (req: Request, res: Response, next: Function) => {
   if (req.isAuthenticated()) {
