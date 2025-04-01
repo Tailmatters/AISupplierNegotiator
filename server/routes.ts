@@ -14,9 +14,10 @@ declare global {
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
-import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, InsertContractTemplate, InsertContract, InsertMessage } from "@shared/schema";
+import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
+import * as XLSX from 'xlsx';
 
 const isAuthenticated = (req: Request, res: Response, next: Function) => {
   if (req.isAuthenticated()) {
@@ -147,6 +148,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating supplier:", error);
       res.status(500).json({ message: "Error updating supplier" });
+    }
+  });
+  
+  // Bulk upload suppliers via Excel file
+  app.post("/api/suppliers/bulk-upload", isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      const file = req.file;
+      
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      
+      // Check if file is an Excel file
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (ext !== '.xlsx' && ext !== '.xls') {
+        return res.status(400).json({ message: "Invalid file type. Only Excel files (.xlsx, .xls) are allowed." });
+      }
+      
+      // Read the Excel file
+      const workbook = XLSX.readFile(file.path);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+      
+      if (data.length === 0) {
+        return res.status(400).json({ message: "The uploaded file contains no data" });
+      }
+      
+      // Validate and process each row
+      const results = {
+        total: data.length,
+        successful: 0,
+        failed: 0,
+        errors: [] as string[]
+      };
+      
+      for (const row of data) {
+        try {
+          // Map Excel columns to supplier fields
+          const rowData = row as Record<string, any>;
+          const supplierData: InsertSupplier = {
+            name: rowData.name || rowData.Name || rowData.NAME || rowData.supplier_name || rowData.SupplierName || '',
+            email: rowData.email || rowData.Email || rowData.EMAIL || rowData.contact_email || rowData.ContactEmail || '',
+            contactPerson: rowData.contactPerson || rowData.ContactPerson || rowData.contact_person || rowData.CONTACT_PERSON || rowData.contact || '',
+            category: rowData.category || rowData.Category || rowData.CATEGORY || rowData.supplier_category || rowData.SupplierCategory || '',
+            status: rowData.status || rowData.Status || rowData.STATUS || 'active'
+          };
+          
+          // Validate the data
+          try {
+            const validatedData = insertSupplierSchema.parse(supplierData);
+            await storage.createSupplier(validatedData);
+            results.successful++;
+          } catch (validationError) {
+            if (validationError instanceof z.ZodError) {
+              const error = fromZodError(validationError);
+              results.errors.push(`Row ${results.successful + results.failed + 1}: ${error.message}`);
+            } else {
+              results.errors.push(`Row ${results.successful + results.failed + 1}: Unknown validation error`);
+            }
+            results.failed++;
+          }
+        } catch (rowError) {
+          results.errors.push(`Row ${results.successful + results.failed + 1}: ${rowError instanceof Error ? rowError.message : 'Unknown error'}`);
+          results.failed++;
+        }
+      }
+      
+      // Delete the temporary file
+      fs.unlinkSync(file.path);
+      
+      res.status(200).json(results);
+    } catch (error) {
+      console.error("Error uploading suppliers:", error);
+      res.status(500).json({ message: "Error processing the Excel file" });
     }
   });
   
