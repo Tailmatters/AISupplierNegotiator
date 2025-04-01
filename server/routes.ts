@@ -14,6 +14,12 @@ declare global {
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Get current file path and directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
