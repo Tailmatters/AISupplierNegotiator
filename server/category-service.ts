@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { getCategoryPath } from "../client/src/data/category-hierarchy";
+import { getCategoryPath } from "./category-utils";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -204,17 +204,17 @@ export async function autoCategorize(description: string): Promise<{
     const result = JSON.parse(response.choices[0].message.content);
     
     // Get the category path based on the ID
-    const path = getCategoryPath(result.categoryId);
+    const categoryPath = getCategoryPath(result.categoryId);
     
-    if (!path) {
+    if (!categoryPath) {
       throw new Error(`Invalid category ID returned: ${result.categoryId}`);
     }
     
     return {
       categoryId: result.categoryId,
-      level1: path.level1,
-      level2: path.level2,
-      level3: path.level3,
+      level1: categoryPath.level1,
+      level2: categoryPath.level2 || undefined,
+      level3: categoryPath.level3 || undefined,
       confidence: Math.min(1, Math.max(0, result.confidence)),
     };
   } catch (error) {

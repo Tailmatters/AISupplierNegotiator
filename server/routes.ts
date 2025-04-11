@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { analyzePastNegotiations, generateInitialMessage, generateNegotiationResponse, analyzeNegotiationResult } from "./openai";
+import { autoCategorize } from "./category-service";
 import { parse as csvParse } from 'csv-parse/sync';
 import multer from "multer";
 
@@ -68,6 +69,23 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
   setupAuth(app);
+  
+  // Category auto-categorization endpoint
+  app.post("/api/categorize", isAuthenticated, async (req, res) => {
+    try {
+      const { description } = req.body;
+      
+      if (!description) {
+        return res.status(400).json({ message: "Description is required" });
+      }
+      
+      const result = await autoCategorize(description);
+      res.json(result);
+    } catch (error) {
+      console.error("Error categorizing description:", error);
+      res.status(500).json({ message: "Error categorizing description" });
+    }
+  });
   
   // Dashboard stats
   app.get("/api/stats", isAuthenticated, async (req, res) => {
