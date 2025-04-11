@@ -159,11 +159,11 @@ const RecentNegotiationsWidget = ({ data }: { data: any }) => {
     <div className="space-y-3">
       {data.negotiations.map((negotiation: any) => (
         <div key={negotiation.id} className="flex justify-between items-center p-2 hover:bg-accent/30 rounded">
-          <div>
-            <p className="font-medium">{negotiation.title}</p>
-            <p className="text-xs text-muted-foreground">{negotiation.category}</p>
+          <div className="max-w-[65%]">
+            <p className="font-medium truncate" title={negotiation.title}>{negotiation.title}</p>
+            <p className="text-xs text-muted-foreground truncate" title={negotiation.category}>{negotiation.category}</p>
           </div>
-          <div className="text-xs">
+          <div className="text-xs ml-2">
             <span className={`px-2 py-1 rounded-full ${negotiation.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
               {negotiation.status}
             </span>
@@ -183,11 +183,11 @@ const CategorySummaryWidget = ({ data }: { data: any }) => {
     <div className="space-y-3">
       {data.categories.map((category: any) => (
         <div key={category.name} className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
-            <span>{category.name}</span>
+          <div className="flex items-center gap-2 max-w-[60%]">
+            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: category.color }}></div>
+            <span className="truncate" title={category.name}>{category.name}</span>
           </div>
-          <span className="font-medium">${category.amount.toLocaleString()}</span>
+          <span className="font-medium ml-2">${category.amount.toLocaleString()}</span>
         </div>
       ))}
     </div>
@@ -203,13 +203,13 @@ const TopSuppliersWidget = ({ data }: { data: any }) => {
     <div className="space-y-3">
       {data.suppliers.map((supplier: any, index: number) => (
         <div key={supplier.id} className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
+          <div className="flex items-center gap-2 max-w-[60%]">
+            <div className="w-5 h-5 rounded-full bg-primary/10 flex-shrink-0 flex items-center justify-center text-xs font-medium">
               {index + 1}
             </div>
-            <span>{supplier.name}</span>
+            <span className="truncate" title={supplier.name}>{supplier.name}</span>
           </div>
-          <span className="font-medium">${supplier.spend.toLocaleString()}</span>
+          <span className="font-medium ml-2">${supplier.spend.toLocaleString()}</span>
         </div>
       ))}
     </div>
@@ -226,7 +226,7 @@ const SpendByYearWidget = ({ data }: { data: any }) => {
       {data.years.map((year: any) => (
         <div key={year.year} className="space-y-1">
           <div className="flex justify-between items-center">
-            <span>{year.year}</span>
+            <span className="min-w-[40px]">{year.year}</span>
             <span className="font-medium">${year.total.toLocaleString()}</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
