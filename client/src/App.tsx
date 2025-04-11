@@ -15,6 +15,7 @@ import SettingsPage from "@/pages/settings-page";
 import AccountPage from "@/pages/account-page";
 import SpendAnalysisPage from "@/pages/spend-analysis-page";
 import CustomDashboardPage from "@/pages/custom-dashboard";
+import MarketAnalysisPage from "@/pages/market-analysis-page";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <ProtectedRoute path="/suppliers" component={SuppliersPage} />
       <ProtectedRoute path="/contracts" component={ContractsPage} />
       <ProtectedRoute path="/spend-analysis" component={SpendAnalysisPage} />
+      <ProtectedRoute path="/market-analysis" component={MarketAnalysisPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/account" component={AccountPage} />
       <Route path="/auth" component={AuthPage} />
