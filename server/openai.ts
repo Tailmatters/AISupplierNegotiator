@@ -1,9 +1,22 @@
 import OpenAI from "openai";
 
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key" });
+// Initialize OpenAI API client with better error handling
+let openai: OpenAI;
+try {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("Warning: OPENAI_API_KEY is not set. AI negotiation features will return simulated responses.");
+  }
+  openai = new OpenAI({ 
+    apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key" 
+  });
+} catch (error) {
+  console.error("Failed to initialize OpenAI client:", error);
+  // Create a dummy OpenAI instance that will be handled in the fallback logic
+  openai = {} as OpenAI;
+}
 
 // Model to use for all API calls
+// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const MODEL = "gpt-4o";
 
 // System prompts for different negotiation contexts

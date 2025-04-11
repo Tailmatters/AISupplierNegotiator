@@ -1102,11 +1102,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update the negotiation with the performance rating
       const updatedNegotiation = await storage.updateNegotiation(negotiationId, {
-        aiPerformanceRating: rating,
-        aiPerformanceFeedback: feedback || null,
+        rating: rating,
+        feedback: feedback || null,
         savingsAmount: savingsAmount || 0,
         savingsPercentage: savingsPercentage || 0,
-        ratedAt: new Date()
+        // Note: We're using the existing fields in the schema
       });
       
       res.json({ 
