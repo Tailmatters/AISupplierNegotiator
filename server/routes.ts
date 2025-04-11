@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
-import { analyzePastNegotiations, generateInitialMessage, generateNegotiationResponse, analyzeNegotiationResult } from "./openai";
+import { analyzePastNegotiations, generateInitialMessage, generateNegotiationResponse, analyzeNegotiationResult, generatePortersFiveForces } from "./openai";
 import { autoCategorize } from "./category-service";
 import { parse as csvParse } from 'csv-parse/sync';
 import multer from "multer";
@@ -84,6 +84,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error categorizing description:", error);
       res.status(500).json({ message: "Error categorizing description" });
+    }
+  });
+  
+  // Porter's Five Forces analysis endpoint
+  app.post("/api/porters-five-forces", isAuthenticated, async (req, res) => {
+    try {
+      const { category, subcategory, subcategoryLevel3, description } = req.body;
+      
+      if (!category) {
+        return res.status(400).json({ message: "Category is required" });
+      }
+      
+      const analysis = await generatePortersFiveForces(
+        category,
+        subcategory,
+        subcategoryLevel3,
+        description
+      );
+      
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error generating Porter's Five Forces analysis:", error);
+      res.status(500).json({ message: "Error generating market analysis" });
     }
   });
   

@@ -3,6 +3,9 @@ import OpenAI from "openai";
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key" });
 
+// Model to use for all API calls
+const MODEL = "gpt-4o";
+
 // System prompts for different negotiation contexts
 const SYSTEM_PROMPTS = {
   default: "You are a professional AI negotiator representing a procurement team. Your goal is to negotiate the best deal for your company based on the objectives provided. Be firm but respectful, and use data from past negotiations to support your arguments.",
@@ -37,7 +40,7 @@ function getSystemPrompt(category: string): string {
 export async function analyzePastNegotiations(pastData: string, category: string): Promise<any> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: MODEL,
       messages: [
         {
           role: "system",
@@ -60,11 +63,12 @@ export async function analyzePastNegotiations(pastData: string, category: string
       response_format: { type: "json_object" },
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content || '{}';
+    const result = JSON.parse(content);
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error analyzing past negotiations:", error);
-    throw new Error("Failed to analyze past negotiations: " + error.message);
+    throw new Error("Failed to analyze past negotiations: " + (error?.message || "Unknown error"));
   }
 }
 
@@ -77,7 +81,7 @@ export async function generateInitialMessage(
 ): Promise<string> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: MODEL,
       messages: [
         {
           role: "system",
@@ -100,10 +104,10 @@ export async function generateInitialMessage(
       ],
     });
 
-    return response.choices[0].message.content;
-  } catch (error) {
+    return response.choices[0].message.content || 'Unable to generate message. Please try again.';
+  } catch (error: any) {
     console.error("Error generating initial message:", error);
-    throw new Error("Failed to generate initial message: " + error.message);
+    throw new Error("Failed to generate initial message: " + (error?.message || "Unknown error"));
   }
 }
 
@@ -127,14 +131,14 @@ export async function generateNegotiationResponse(
     ];
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: MODEL,
       messages: messages,
     });
 
-    return response.choices[0].message.content;
-  } catch (error) {
+    return response.choices[0].message.content || 'Unable to generate response. Please try again.';
+  } catch (error: any) {
     console.error("Error generating negotiation response:", error);
-    throw new Error("Failed to generate response: " + error.message);
+    throw new Error("Failed to generate response: " + (error?.message || "Unknown error"));
   }
 }
 
@@ -145,7 +149,7 @@ export async function analyzeNegotiationResult(
 ): Promise<any> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: MODEL,
       messages: [
         {
           role: "system",
@@ -174,10 +178,182 @@ export async function analyzeNegotiationResult(
       response_format: { type: "json_object" },
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content || '{}';
+    const result = JSON.parse(content);
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error analyzing negotiation result:", error);
-    throw new Error("Failed to analyze negotiation result: " + error.message);
+    throw new Error("Failed to analyze negotiation result: " + (error?.message || "Unknown error"));
+  }
+}
+
+/**
+ * Generate Porter's Five Forces analysis for a specific category
+ * @param category The category name (Level 1 category)
+ * @param subcategory Optional Level 2 category
+ * @param subcategoryLevel3 Optional Level 3 category
+ * @param description Additional context about the purchase
+ * @returns Structured Porter's Five Forces analysis
+ */
+export async function generatePortersFiveForces(
+  category: string,
+  subcategory?: string,
+  subcategoryLevel3?: string,
+  description?: string
+): Promise<{
+  threatOfNewEntrants: {
+    level: 'Low' | 'Medium' | 'High';
+    analysis: string;
+    implications: string[];
+  };
+  bargainingPowerOfBuyers: {
+    level: 'Low' | 'Medium' | 'High';
+    analysis: string;
+    implications: string[];
+  };
+  threatOfSubstitutes: {
+    level: 'Low' | 'Medium' | 'High';
+    analysis: string;
+    implications: string[];
+  };
+  bargainingPowerOfSuppliers: {
+    level: 'Low' | 'Medium' | 'High';
+    analysis: string;
+    implications: string[];
+  };
+  competitiveRivalry: {
+    level: 'Low' | 'Medium' | 'High';
+    analysis: string;
+    implications: string[];
+  };
+  overallAssessment: string;
+  negotiationStrategies: string[];
+}> {
+  try {
+    // Create full category path for better context
+    const fullCategory = [category, subcategory, subcategoryLevel3]
+      .filter(Boolean)
+      .join(" > ");
+    
+    const prompt = `
+      Generate a Porter's Five Forces analysis for the following procurement category: ${fullCategory}
+      ${description ? `\nAdditional context: ${description}` : ''}
+      
+      For each of the five forces, provide:
+      1. An assessment level (Low, Medium, or High)
+      2. A concise analysis explaining the reasoning
+      3. Specific implications for negotiation
+      
+      Finally, provide an overall assessment and recommended negotiation strategies.
+      
+      Format your response as JSON with the following structure:
+      {
+        "threatOfNewEntrants": {
+          "level": "Low/Medium/High",
+          "analysis": "concise explanation",
+          "implications": ["implication 1", "implication 2", ...]
+        },
+        "bargainingPowerOfBuyers": {
+          "level": "Low/Medium/High",
+          "analysis": "concise explanation",
+          "implications": ["implication 1", "implication 2", ...]
+        },
+        "threatOfSubstitutes": {
+          "level": "Low/Medium/High",
+          "analysis": "concise explanation",
+          "implications": ["implication 1", "implication 2", ...]
+        },
+        "bargainingPowerOfSuppliers": {
+          "level": "Low/Medium/High",
+          "analysis": "concise explanation",
+          "implications": ["implication 1", "implication 2", ...]
+        },
+        "competitiveRivalry": {
+          "level": "Low/Medium/High",
+          "analysis": "concise explanation",
+          "implications": ["implication 1", "implication 2", ...]
+        },
+        "overallAssessment": "summary of market dynamics and negotiation position",
+        "negotiationStrategies": ["strategy 1", "strategy 2", ...]
+      }
+    `;
+    
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a procurement expert specializing in market analysis. Provide insightful Porter's Five Forces analyses that can help procurement professionals develop effective negotiation strategies." 
+        },
+        { role: "user", content: prompt }
+      ],
+      response_format: { type: "json_object" },
+    });
+    
+    const contentStr = completion.choices[0].message.content || '{}';
+    const content = JSON.parse(contentStr);
+    
+    // Ensure the response structure is as expected
+    return {
+      threatOfNewEntrants: {
+        level: content.threatOfNewEntrants?.level || 'Medium',
+        analysis: content.threatOfNewEntrants?.analysis || 'Analysis not available',
+        implications: content.threatOfNewEntrants?.implications || []
+      },
+      bargainingPowerOfBuyers: {
+        level: content.bargainingPowerOfBuyers?.level || 'Medium',
+        analysis: content.bargainingPowerOfBuyers?.analysis || 'Analysis not available',
+        implications: content.bargainingPowerOfBuyers?.implications || []
+      },
+      threatOfSubstitutes: {
+        level: content.threatOfSubstitutes?.level || 'Medium',
+        analysis: content.threatOfSubstitutes?.analysis || 'Analysis not available',
+        implications: content.threatOfSubstitutes?.implications || []
+      },
+      bargainingPowerOfSuppliers: {
+        level: content.bargainingPowerOfSuppliers?.level || 'Medium',
+        analysis: content.bargainingPowerOfSuppliers?.analysis || 'Analysis not available',
+        implications: content.bargainingPowerOfSuppliers?.implications || []
+      },
+      competitiveRivalry: {
+        level: content.competitiveRivalry?.level || 'Medium',
+        analysis: content.competitiveRivalry?.analysis || 'Analysis not available',
+        implications: content.competitiveRivalry?.implications || []
+      },
+      overallAssessment: content.overallAssessment || 'Assessment not available',
+      negotiationStrategies: content.negotiationStrategies || []
+    };
+  } catch (error: any) {
+    console.error("Error generating Porter's Five Forces analysis:", error);
+    // Return a default structure in case of error
+    return {
+      threatOfNewEntrants: {
+        level: 'Medium',
+        analysis: 'Analysis could not be generated due to an error.',
+        implications: ['Consider researching this aspect manually']
+      },
+      bargainingPowerOfBuyers: {
+        level: 'Medium',
+        analysis: 'Analysis could not be generated due to an error.',
+        implications: ['Consider researching this aspect manually']
+      },
+      threatOfSubstitutes: {
+        level: 'Medium',
+        analysis: 'Analysis could not be generated due to an error.',
+        implications: ['Consider researching this aspect manually']
+      },
+      bargainingPowerOfSuppliers: {
+        level: 'Medium',
+        analysis: 'Analysis could not be generated due to an error.',
+        implications: ['Consider researching this aspect manually']
+      },
+      competitiveRivalry: {
+        level: 'Medium',
+        analysis: 'Analysis could not be generated due to an error.',
+        implications: ['Consider researching this aspect manually']
+      },
+      overallAssessment: 'Unable to generate an assessment due to an error.',
+      negotiationStrategies: ['Consider a standard negotiation approach based on best practices']
+    };
   }
 }
