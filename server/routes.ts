@@ -518,7 +518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update the negotiation status
       const updatedNegotiation = await storage.updateNegotiation(negotiationId, {
         status: "completed",
-        concludedAt: new Date().toISOString()
+        concludedAt: new Date()
       });
       
       // Get the supplier
@@ -1079,6 +1079,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Complete negotiation
+  // Performance rating endpoint
+  app.post("/api/negotiations/:id/performance", isAuthenticated, async (req, res) => {
+    try {
+      const negotiationId = parseInt(req.params.id);
+      const negotiation = await storage.getNegotiation(negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+      
+      // Check if user is authorized
+      if (negotiation.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to rate this negotiation" });
+      }
+      
+      const { rating, feedback, savingsAmount, savingsPercentage } = req.body;
+      
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "Valid rating (1-5) is required" });
+      }
+      
+      // Update the negotiation with the performance rating
+      const updatedNegotiation = await storage.updateNegotiation(negotiationId, {
+        aiPerformanceRating: rating,
+        aiPerformanceFeedback: feedback || null,
+        savingsAmount: savingsAmount || 0,
+        savingsPercentage: savingsPercentage || 0,
+        ratedAt: new Date()
+      });
+      
+      res.json({ 
+        success: true, 
+        negotiation: updatedNegotiation
+      });
+    } catch (error) {
+      console.error("Error saving performance rating:", error);
+      res.status(500).json({ message: "Error saving performance rating" });
+    }
+  });
+
   app.post("/api/negotiations/:id/complete", isAuthenticated, async (req, res) => {
     try {
       const negotiationId = parseInt(req.params.id);

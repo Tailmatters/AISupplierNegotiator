@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Layout } from "@/components/layout/sidebar";
 import { NegotiationChat } from "@/components/negotiations/negotiation-chat";
+import { PerformanceSummary } from "@/components/negotiations/performance-summary";
 import { InviteSupplier } from "@/components/suppliers/invite-supplier";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ import {
   UserPlus,
   XCircle,
   BookText,
+  Star,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -427,6 +429,29 @@ export default function NegotiationDetails() {
                     </div>
                   </CardContent>
                 </Card>
+                
+                {/* Add Performance Summary when negotiation has initialOffer and finalOffer */}
+                {negotiation?.status === "completed" && negotiation?.initialOffer && negotiation?.finalOffer && (
+                  <div className="mt-6">
+                    <PerformanceSummary
+                      negotiationId={negotiation.id}
+                      initialOffer={Number(negotiation.initialOffer)}
+                      finalOffer={Number(negotiation.finalOffer)}
+                      objectives={negotiation.objectives}
+                      supplierName={negotiation.supplier?.name || "Supplier"}
+                      category={negotiation.category}
+                      currency={negotiation.currency || "USD"}
+                      unit={negotiation.unit}
+                      onNegotiationConcluded={() => {
+                        refetch();
+                        toast({
+                          title: "Negotiation Concluded",
+                          description: "The negotiation has been successfully concluded.",
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="messages">
                 <Card>
