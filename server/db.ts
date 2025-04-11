@@ -3,7 +3,7 @@ import pkg from 'pg';
 const { Pool } = pkg;
 
 // Create a PostgreSQL connection pool
-const pool = new Pool({
+export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
