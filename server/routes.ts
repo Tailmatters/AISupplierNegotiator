@@ -1,11 +1,13 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { analyzePastNegotiations, generateInitialMessage, generateNegotiationResponse, analyzeNegotiationResult, generatePortersFiveForces } from "./openai";
 import { autoCategorize } from "./category-service";
+import { sendNegotiationInvitation, sendNegotiationConclusion } from "./email";
 import { parse as csvParse } from 'csv-parse/sync';
 import multer from "multer";
+import { WebSocketServer } from "ws";
 
 // Add multer types to Express namespace
 declare global {
@@ -546,8 +548,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      // In a real application, send an email to the supplier
-      // For this exercise, we'll just simulate it by creating a message
+      // Send email to the supplier using SendGrid
+      await sendNegotiationConclusion({
+        supplierEmail: supplier.email,
+        supplierName: supplier.name,
+        categoryName: negotiation.category,
+        outcome: negotiation.outcome || "success"
+      });
+      
+      // Also log the notification message in the system
       const supplierNotificationMessage = `Dear ${supplier.name},\n\nWe are pleased to inform you that our procurement team has concluded the negotiation regarding ${negotiation.category}. The final terms have been approved and we look forward to moving forward with the agreed upon conditions.\n\n${additionalInstructions ? `Additional information: ${additionalInstructions}\n\n` : ''}Thank you for your cooperation throughout this process.\n\nBest regards,\nAI Negotiator on behalf of the Procurement Team`;
       
       await storage.createMessage({
