@@ -12,6 +12,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AlertCircle, BarChart4, PieChart, UploadCloud, FileSpreadsheet, Clock } from "lucide-react";
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, CartesianGrid, XAxis, YAxis, Legend, Bar, Tooltip, TooltipProps } from "recharts";
+import { CategorySelector } from "@/components/category/category-selector";
 
 // Define types for our data
 interface YearData {
@@ -212,10 +213,11 @@ const SpendAnalysisPage = () => {
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="suppliers">Supplier Analysis</TabsTrigger>
           <TabsTrigger value="categories">Category Analysis</TabsTrigger>
+          <TabsTrigger value="category-management">Category Management</TabsTrigger>
           <TabsTrigger value="upload">Upload Data</TabsTrigger>
         </TabsList>
         
@@ -550,6 +552,70 @@ const SpendAnalysisPage = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+        
+        <TabsContent value="category-management" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="col-span-1">
+              {/* Import the CategorySelector component */}
+              <CategorySelector 
+                description=""
+                onCategoryChange={(categories) => {
+                  console.log("Category changed:", categories);
+                  // Here you would typically update the selected item's category
+                }}
+              />
+            </div>
+            
+            <div className="col-span-1 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Category Management</CardTitle>
+                  <CardDescription>Manage your procurement categories</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <p>
+                      Use the category selector to manually categorize purchases or use our AI-powered 
+                      auto-categorization feature.
+                    </p>
+                    
+                    <h3 className="text-lg font-semibold mt-4">Benefits of Proper Categorization</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Accurately track spending across departments</li>
+                      <li>Identify consolidation opportunities with suppliers</li>
+                      <li>Better negotiate contracts with category-specific insights</li>
+                      <li>Improve spend visibility for budget planning</li>
+                    </ul>
+                    
+                    <h3 className="text-lg font-semibold mt-4">Auto-categorization Accuracy</h3>
+                    <p>
+                      Our AI-powered auto-categorization analyzes purchase descriptions and matches them to 
+                      the most appropriate category based on trained models. The confidence score helps you 
+                      determine when manual review might be necessary.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Bulk Categorization</CardTitle>
+                  <CardDescription>Update multiple items at once</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="mb-4">
+                    You can bulk upload and categorize purchases through the Upload Data tab, or 
+                    modify an existing CSV file with category information.
+                  </p>
+                  <Button variant="outline" disabled={true}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Download Category Template
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
         
         <TabsContent value="upload" className="space-y-4">

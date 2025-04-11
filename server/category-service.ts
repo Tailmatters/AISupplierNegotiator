@@ -201,7 +201,9 @@ export async function autoCategorize(description: string): Promise<{
       response_format: { type: "json_object" },
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    // Ensure we have a valid content string before parsing
+    const contentStr = response.choices[0].message.content || '{"categoryId": "other-misc-subscriptions", "confidence": 0.1}';
+    const result = JSON.parse(contentStr);
     
     // Get the category path based on the ID
     const categoryPath = getCategoryPath(result.categoryId);
