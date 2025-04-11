@@ -30,7 +30,7 @@ export const negotiations = pgTable("negotiations", {
   category: text("category").notNull(),
   objectives: text("objectives").notNull(),
   supplierId: integer("supplier_id").notNull(),
-  status: text("status").default("pending"), // pending, active, completed, cancelled
+  status: text("status").default("pending"), // pending, active, completed, cancelled, pending_further
   startedAt: timestamp("started_at").defaultNow(),
   completedAt: timestamp("completed_at"),
   pastDataFilePath: text("past_data_file_path"), // File path to uploaded past negotiation data
@@ -38,6 +38,16 @@ export const negotiations = pgTable("negotiations", {
   outcome: text("outcome"), // Success, failure, etc.
   savingsPercentage: integer("savings_percentage"), // Percentage savings achieved
   createdBy: integer("created_by").notNull(), // User ID who created the negotiation
+  
+  // Performance evaluation fields
+  initialOffer: decimal("initial_offer", { precision: 15, scale: 2 }), // Initial offer amount
+  finalOffer: decimal("final_offer", { precision: 15, scale: 2 }), // Final offer amount
+  currency: text("currency").default("USD"), // Currency for the offers
+  unit: text("unit"), // Optional unit of measure (e.g., "piece", "kg", etc.)
+  rating: integer("rating"), // 1-5 star rating from buyer
+  feedback: text("feedback"), // Detailed feedback from buyer
+  savingsAmount: decimal("savings_amount", { precision: 15, scale: 2 }), // Absolute amount saved
+  concludedAt: timestamp("concluded_at"), // When the negotiation was formally concluded
 });
 
 export const messages = pgTable("messages", {
@@ -227,6 +237,10 @@ export const insertNegotiationSchema = createInsertSchema(negotiations).pick({
   status: true,
   pastDataFilePath: true,
   createdBy: true,
+  initialOffer: true,
+  finalOffer: true,
+  currency: true,
+  unit: true,
 });
 
 export const insertMessageSchema = createInsertSchema(messages).pick({

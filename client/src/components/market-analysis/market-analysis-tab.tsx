@@ -85,11 +85,18 @@ export function MarketAnalysisTab({
           <div className="mb-6">
             <h3 className="text-lg font-medium mb-2">Select Category</h3>
             <CategorySelector 
-              initialLevel1={category}
-              initialLevel2={subcategory}
-              initialLevel3={subcategoryLevel3}
-              initialDescription={description}
-              onChange={handleCategoryChange}
+              initialCategory={category}
+              initialSubcategory={subcategory}
+              initialSubcategoryLevel3={subcategoryLevel3}
+              description={description}
+              onCategoryChange={(data) => {
+                handleCategoryChange({
+                  level1: data.category,
+                  level2: data.subcategory,
+                  level3: data.subcategoryLevel3,
+                  description: description
+                });
+              }}
             />
           </div>
 

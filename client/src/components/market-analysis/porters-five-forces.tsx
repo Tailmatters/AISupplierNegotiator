@@ -159,19 +159,28 @@ export function PortersFiveForces({
     setDescriptionText(e.target.value);
   };
 
+  // Helper type guard function to check if object has force structure
+  const isForceObject = (obj: any): obj is { level: 'Low' | 'Medium' | 'High', analysis: string, implications: string[] } => {
+    return obj && typeof obj === 'object' && 'level' in obj && 'analysis' in obj && 'implications' in obj;
+  };
+
   // Handle force level edit
   const handleForceLevelEdit = (
     force: keyof PortersForcesAnalysis,
     level: 'Low' | 'Medium' | 'High'
   ) => {
     if (editedAnalysis && isEditing) {
-      setEditedAnalysis({
-        ...editedAnalysis,
-        [force]: {
-          ...editedAnalysis[force as keyof PortersForcesAnalysis],
-          level,
-        },
-      });
+      const forceData = editedAnalysis[force];
+      
+      if (isForceObject(forceData)) {
+        setEditedAnalysis({
+          ...editedAnalysis,
+          [force]: {
+            ...forceData,
+            level,
+          },
+        });
+      }
     }
   };
 
@@ -181,13 +190,17 @@ export function PortersFiveForces({
     analysis: string
   ) => {
     if (editedAnalysis && isEditing) {
-      setEditedAnalysis({
-        ...editedAnalysis,
-        [force]: {
-          ...editedAnalysis[force as keyof PortersForcesAnalysis],
-          analysis,
-        },
-      });
+      const forceData = editedAnalysis[force];
+      
+      if (isForceObject(forceData)) {
+        setEditedAnalysis({
+          ...editedAnalysis,
+          [force]: {
+            ...forceData,
+            analysis,
+          },
+        });
+      }
     }
   };
 
@@ -198,16 +211,20 @@ export function PortersFiveForces({
     value: string
   ) => {
     if (editedAnalysis && isEditing) {
-      const implications = [...editedAnalysis[force as keyof PortersForcesAnalysis].implications];
-      implications[index] = value;
+      const forceData = editedAnalysis[force];
       
-      setEditedAnalysis({
-        ...editedAnalysis,
-        [force]: {
-          ...editedAnalysis[force as keyof PortersForcesAnalysis],
-          implications,
-        },
-      });
+      if (isForceObject(forceData) && Array.isArray(forceData.implications)) {
+        const implications = [...forceData.implications];
+        implications[index] = value;
+        
+        setEditedAnalysis({
+          ...editedAnalysis,
+          [force]: {
+            ...forceData,
+            implications,
+          },
+        });
+      }
     }
   };
 

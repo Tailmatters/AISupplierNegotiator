@@ -447,6 +447,249 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Negotiation feedback endpoint
+  app.post("/api/negotiations/:id/feedback", isAuthenticated, async (req, res) => {
+    try {
+      const negotiationId = parseInt(req.params.id);
+      const negotiation = await storage.getNegotiation(negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+      
+      // Check if user is authorized
+      if (negotiation.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to submit feedback for this negotiation" });
+      }
+      
+      const { rating, feedback, savingsAmount, savingsPercentage } = req.body;
+      
+      // Update the negotiation with feedback
+      const updatedNegotiation = await storage.updateNegotiation(negotiationId, {
+        rating,
+        feedback,
+        savingsAmount: savingsAmount || 0,
+        savingsPercentage: savingsPercentage || 0
+      });
+      
+      // Create a system message to record the feedback
+      await storage.createMessage({
+        negotiationId,
+        senderId: "system",
+        senderType: "system",
+        content: `Buyer rated the negotiation performance: ${rating}/5 stars`,
+        metadata: { 
+          event: "feedback_submitted",
+          rating,
+          feedback,
+          savingsAmount,
+          savingsPercentage
+        }
+      });
+      
+      res.json({ success: true, negotiation: updatedNegotiation });
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      res.status(500).json({ message: "Error submitting feedback" });
+    }
+  });
+  
+  // Conclude negotiation endpoint
+  app.post("/api/negotiations/:id/conclude", isAuthenticated, async (req, res) => {
+    try {
+      const negotiationId = parseInt(req.params.id);
+      const negotiation = await storage.getNegotiation(negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+      
+      // Check if user is authorized
+      if (negotiation.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to conclude this negotiation" });
+      }
+      
+      const { approved, additionalInstructions } = req.body;
+      
+      if (!approved) {
+        return res.status(400).json({ message: "Approval status is required" });
+      }
+      
+      // Update the negotiation status
+      const updatedNegotiation = await storage.updateNegotiation(negotiationId, {
+        status: "completed",
+        concludedAt: new Date().toISOString()
+      });
+      
+      // Get the supplier
+      const supplier = await storage.getSupplier(negotiation.supplierId);
+      
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      
+      // Get the last messages to determine the final terms
+      const messages = await storage.getMessagesByNegotiation(negotiationId);
+      
+      // Create a conclusion message
+      const conclusionMessage = `Negotiation concluded and approved by the buyer. Final terms have been accepted.${additionalInstructions ? `\n\nAdditional notes: ${additionalInstructions}` : ''}`;
+      
+      await storage.createMessage({
+        negotiationId,
+        senderId: "system",
+        senderType: "system",
+        content: conclusionMessage,
+        metadata: { 
+          event: "negotiation_concluded",
+          approvedBy: req.user!.id,
+          additionalInstructions
+        }
+      });
+      
+      // In a real application, send an email to the supplier
+      // For this exercise, we'll just simulate it by creating a message
+      const supplierNotificationMessage = `Dear ${supplier.name},\n\nWe are pleased to inform you that our procurement team has concluded the negotiation regarding ${negotiation.category}. The final terms have been approved and we look forward to moving forward with the agreed upon conditions.\n\n${additionalInstructions ? `Additional information: ${additionalInstructions}\n\n` : ''}Thank you for your cooperation throughout this process.\n\nBest regards,\nAI Negotiator on behalf of the Procurement Team`;
+      
+      await storage.createMessage({
+        negotiationId,
+        senderId: "system",
+        senderType: "system",
+        content: supplierNotificationMessage,
+        metadata: { 
+          event: "supplier_notification",
+          notificationType: "conclusion",
+          supplierEmail: supplier.email
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        negotiation: updatedNegotiation,
+        supplierNotified: true
+      });
+    } catch (error) {
+      console.error("Error concluding negotiation:", error);
+      res.status(500).json({ message: "Error concluding negotiation" });
+    }
+  });
+  
+  // Request further negotiation endpoint
+  app.post("/api/negotiations/:id/request-further", isAuthenticated, async (req, res) => {
+    try {
+      const negotiationId = parseInt(req.params.id);
+      const negotiation = await storage.getNegotiation(negotiationId);
+      
+      if (!negotiation) {
+        return res.status(404).json({ message: "Negotiation not found" });
+      }
+      
+      // Check if user is authorized
+      if (negotiation.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "Not authorized to request further negotiation" });
+      }
+      
+      const { instructions } = req.body;
+      
+      // Update the negotiation to indicate further negotiation requested
+      const updatedNegotiation = await storage.updateNegotiation(negotiationId, {
+        status: "pending_further"
+      });
+      
+      // Get the supplier
+      const supplier = await storage.getSupplier(negotiation.supplierId);
+      
+      if (!supplier) {
+        return res.status(404).json({ message: "Supplier not found" });
+      }
+      
+      // Create a system message to record the request
+      await storage.createMessage({
+        negotiationId,
+        senderId: "system",
+        senderType: "system",
+        content: `Buyer has requested further negotiation. Management input: ${instructions || 'No specific instructions provided.'}`,
+        metadata: { 
+          event: "further_negotiation_requested",
+          requestedBy: req.user!.id,
+          instructions
+        }
+      });
+      
+      // In a real application, send an email to the supplier
+      // For this exercise, we'll just simulate it by creating a message
+      const supplierNotificationMessage = `Dear ${supplier.name},\n\nWe would like to continue our negotiation regarding ${negotiation.category}. Our procurement team has reviewed the current terms and would like to discuss further improvements.\n\n${instructions ? `Specific areas to focus on: ${instructions}\n\n` : ''}Please let us know your availability to continue this discussion.\n\nBest regards,\nAI Negotiator on behalf of the Procurement Team`;
+      
+      await storage.createMessage({
+        negotiationId,
+        senderId: "system",
+        senderType: "system",
+        content: supplierNotificationMessage,
+        metadata: { 
+          event: "supplier_notification",
+          notificationType: "further_negotiation",
+          supplierEmail: supplier.email
+        }
+      });
+      
+      // Generate AI response to restart the negotiation
+      let aiResponse = '';
+      try {
+        // Get all messages in the conversation
+        const messages = await storage.getMessagesByNegotiation(negotiationId);
+        
+        // Format messages for OpenAI
+        const conversationHistory = messages
+          .filter(msg => msg.senderType !== 'system' || (msg.metadata as any)?.event === 'negotiation_started')
+          .map(msg => {
+            let role = "user";
+            if (msg.senderType === "ai") role = "assistant";
+            else if (msg.senderType === "system") role = "system";
+            
+            return {
+              role,
+              content: msg.content
+            };
+          });
+        
+        // Add the new instructions from management as context
+        conversationHistory.push({
+          role: "system",
+          content: `The buyer wants to continue negotiation with these additional instructions: ${instructions || 'No specific instructions provided, but they are seeking a better deal.'}. Restart the negotiation based on this feedback.`
+        });
+        
+        // Generate AI response
+        aiResponse = await generateNegotiationResponse(
+          supplier.name,
+          negotiation.category,
+          `${negotiation.objectives}\n\nAdditional management input: ${instructions}`,
+          conversationHistory
+        );
+        
+        // Save AI message
+        await storage.createMessage({
+          negotiationId,
+          senderId: "ai",
+          senderType: "ai",
+          content: aiResponse,
+          metadata: { event: "negotiation_continued" }
+        });
+      } catch (err) {
+        console.error("Error generating AI response for continued negotiation:", err);
+        // Continue even if AI response generation fails
+      }
+      
+      res.json({ 
+        success: true, 
+        negotiation: updatedNegotiation,
+        supplierNotified: true,
+        aiResponse
+      });
+    } catch (error) {
+      console.error("Error requesting further negotiation:", error);
+      res.status(500).json({ message: "Error requesting further negotiation" });
+    }
+  });
+  
   app.post("/api/negotiations/:id/messages", isAuthenticated, async (req, res) => {
     try {
       const negotiationId = parseInt(req.params.id);

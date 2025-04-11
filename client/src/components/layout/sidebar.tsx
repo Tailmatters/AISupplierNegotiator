@@ -14,7 +14,8 @@ import {
   X,
   CreditCard,
   BarChart4,
-  Grid
+  Grid,
+  TrendingUp
 } from "lucide-react";
 
 interface SidebarProps {
@@ -42,6 +43,7 @@ export function Sidebar({ mobile = false, onClose }: SidebarProps) {
         { label: "Suppliers", icon: <Building2 className="w-5 h-5" />, path: "/suppliers" },
         { label: "Contracts", icon: <FileText className="w-5 h-5" />, path: "/contracts" },
         { label: "Spend Analysis", icon: <BarChart4 className="w-5 h-5" />, path: "/spend-analysis" },
+        { label: "Market Analysis", icon: <TrendingUp className="w-5 h-5" />, path: "/market-analysis" },
       ],
     },
     {
