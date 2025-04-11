@@ -127,8 +127,9 @@ export const spendData = pgTable("spend_data", {
   userId: integer("user_id").notNull().references(() => users.id),
   supplierId: integer("supplier_id").references(() => suppliers.id),
   supplierName: text("supplier_name").notNull(), // Fallback for suppliers not in the system
-  category: text("category").notNull(),
-  subcategory: text("subcategory"),
+  category: text("category").notNull(), // Level 1 category
+  subcategory: text("subcategory"), // Level 2 category
+  subcategoryLevel3: text("subcategory_level3"), // Level 3 category
   spendAmount: decimal("spend_amount", { precision: 15, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("USD"),
   quantity: decimal("quantity", { precision: 15, scale: 2 }),
@@ -142,6 +143,7 @@ export const spendData = pgTable("spend_data", {
   uploadId: integer("upload_id").references(() => spendUploads.id),
   dataSource: text("data_source").notNull().default("csv_upload"), // csv_upload, sap_api, coupa_api, etc.
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  isAutoCategorized: boolean("is_auto_categorized").default(false), // Flag for auto-categorization
 });
 
 export const apiConnections = pgTable("api_connections", {
@@ -324,6 +326,7 @@ export const insertSpendDataSchema = createInsertSchema(spendData).pick({
   supplierName: true,
   category: true,
   subcategory: true,
+  subcategoryLevel3: true,
   spendAmount: true,
   currency: true,
   quantity: true,
@@ -336,6 +339,7 @@ export const insertSpendDataSchema = createInsertSchema(spendData).pick({
   transactionDate: true,
   uploadId: true,
   dataSource: true,
+  isAutoCategorized: true,
 });
 
 export const insertApiConnectionSchema = createInsertSchema(apiConnections).pick({
