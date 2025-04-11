@@ -624,8 +624,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      // In a real application, send an email to the supplier
-      // For this exercise, we'll just simulate it by creating a message
+      // Send email to the supplier about continuing negotiation
+      await sendNegotiationConclusion({
+        supplierEmail: supplier.email,
+        supplierName: supplier.name,
+        categoryName: negotiation.category,
+        outcome: "continue" // Custom outcome for continuation
+      });
+      
+      // Also record the notification in the system
       const supplierNotificationMessage = `Dear ${supplier.name},\n\nWe would like to continue our negotiation regarding ${negotiation.category}. Our procurement team has reviewed the current terms and would like to discuss further improvements.\n\n${instructions ? `Specific areas to focus on: ${instructions}\n\n` : ''}Please let us know your availability to continue this discussion.\n\nBest regards,\nAI Negotiator on behalf of the Procurement Team`;
       
       await storage.createMessage({
@@ -812,7 +819,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertInvitationSchema.parse(invitationData);
       const invitation = await storage.createInvitation(validatedData);
       
-      // In a real app, would send an email with the invitation link
+      // Send invitation email to supplier
+      const supplierEmail = invitation.email;
+      const supplier = await storage.getSupplier(invitation.supplierId);
+      const supplierName = supplier ? supplier.name : "Supplier";
+      const invitedNegotiation = await storage.getNegotiation(invitation.negotiationId);
+      
+      // Construct the invitation URL
+      const baseUrl = process.env.BASE_URL || `http://localhost:5000`;
+      const invitationLink = `${baseUrl}/supplier-portal/${invitation.token}`;
+      
+      // Send the email
+      await sendNegotiationInvitation({
+        supplierEmail,
+        supplierName,
+        invitationLink,
+        categoryName: invitedNegotiation?.category || "procurement items"
+      });
+      
       res.status(201).json(invitation);
     } catch (error) {
       if (error instanceof z.ZodError) {
