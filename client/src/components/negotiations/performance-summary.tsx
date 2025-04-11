@@ -4,8 +4,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Star, StarHalf, Sparkles, TrendingUp, BadgePercent } from "lucide-react";
+import { Star, StarHalf, Sparkles, TrendingUp, BadgePercent, Smile, CheckCheck, Clock, ThumbsUp, Trophy, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PerformanceSummaryProps {
   negotiationId: number;
@@ -71,51 +74,128 @@ export function PerformanceSummary({
   // Generate stars for rating with improved descriptive labels
   const renderStars = () => {
     const ratingLabels = {
-      1: { label: "Poor", description: "Did not meet objectives" },
-      2: { label: "Fair", description: "Met few objectives" },
-      3: { label: "Good", description: "Met most objectives" },
-      4: { label: "Very Good", description: "Met all objectives" },
-      5: { label: "Excellent", description: "Exceeded objectives" }
+      1: { 
+        label: "Poor", 
+        description: "Did not meet objectives", 
+        icon: <ThumbsUp className="h-4 w-4 text-red-500" />,
+        color: "text-red-500 border-red-200 bg-red-50"
+      },
+      2: { 
+        label: "Fair", 
+        description: "Met few objectives", 
+        icon: <Clock className="h-4 w-4 text-orange-500" />,
+        color: "text-orange-500 border-orange-200 bg-orange-50"
+      },
+      3: { 
+        label: "Good", 
+        description: "Met most objectives", 
+        icon: <Smile className="h-4 w-4 text-yellow-500" />,
+        color: "text-yellow-600 border-yellow-200 bg-yellow-50"
+      },
+      4: { 
+        label: "Very Good", 
+        description: "Met all objectives", 
+        icon: <CheckCheck className="h-4 w-4 text-green-500" />,
+        color: "text-green-600 border-green-200 bg-green-50"
+      },
+      5: { 
+        label: "Excellent", 
+        description: "Exceeded objectives", 
+        icon: <Trophy className="h-4 w-4 text-primary" />,
+        color: "text-primary border-primary/20 bg-primary/5"
+      }
+    };
+    
+    // Handle the current rating display with proper type checking
+    const displayRating = hover || rating;
+    const isValidRating = displayRating >= 1 && displayRating <= 5;
+    
+    // Helper function for safe access to rating labels
+    const getRatingInfo = (r: number) => {
+      if (r >= 1 && r <= 5) {
+        return ratingLabels[r as 1|2|3|4|5];
+      }
+      return null;
     };
     
     return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button
-              key={star}
-              type="button"
-              className="text-2xl focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-md p-1 transition-all duration-200 hover:scale-110"
-              onClick={() => setRating(star)}
-              onMouseEnter={() => setHover(star)}
-              onMouseLeave={() => setHover(0)}
-              aria-label={`Rate ${star} stars: ${ratingLabels[star as 1|2|3|4|5].label}`}
-            >
-              {star <= (hover || rating) ? (
-                <Star
-                  size={28}
-                  className="text-amber-400 fill-amber-400"
-                  strokeWidth={1.5}
-                />
-              ) : (
-                <Star
-                  size={28}
-                  className="text-neutral-300"
-                  strokeWidth={1.5}
-                />
-              )}
-            </button>
-          ))}
-          {(hover || rating) > 0 && (
-            <span className="ml-1 text-base font-medium text-neutral-700">
-              {ratingLabels[(hover || rating) as 1|2|3|4|5].label}
-            </span>
+      <div className="space-y-4">
+        <div className="flex flex-col">
+          <Label className="mb-2 text-neutral-700">Select Rating</Label>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                className={cn(
+                  "text-2xl focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-md p-1",
+                  "transition-all duration-200 hover:scale-110",
+                  star <= rating && "animate-pulse-once"
+                )}
+                onClick={() => setRating(star)}
+                onMouseEnter={() => setHover(star)}
+                onMouseLeave={() => setHover(0)}
+                aria-label={`Rate ${star} stars: ${ratingLabels[star as 1|2|3|4|5].label}`}
+              >
+                {star <= displayRating ? (
+                  <Star
+                    size={32}
+                    className="text-amber-400 fill-amber-400"
+                    strokeWidth={1.5}
+                  />
+                ) : (
+                  <Star
+                    size={32}
+                    className="text-neutral-300"
+                    strokeWidth={1.5}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+          
+          {/* Star labels at the bottom */}
+          <div className="flex justify-between text-xs text-neutral-500 px-3">
+            <span>Poor</span>
+            <span className="flex-1"></span>
+            <span>Excellent</span>
+          </div>
+          
+          {isValidRating && (
+            <div className="mt-4 flex gap-2 items-start">
+              {(() => {
+                const info = getRatingInfo(displayRating);
+                if (!info) return null;
+                
+                return (
+                  <div className={cn(
+                    "p-2 rounded-md border flex-1",
+                    info.color
+                  )}>
+                    <div className="flex items-center gap-2 mb-1">
+                      {info.icon}
+                      <span className="font-semibold">
+                        {info.label} ({displayRating}/5)
+                      </span>
+                    </div>
+                    <p className="text-sm">
+                      {info.description}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
           )}
         </div>
         
-        {(hover || rating) > 0 && (
-          <div className="text-sm text-neutral-600 bg-neutral-50 p-2 rounded-md">
-            {ratingLabels[(hover || rating) as 1|2|3|4|5].description}
+        {/* Progress bar showing rating visually */}
+        {isValidRating && (
+          <div className="pt-2">
+            <div className="flex justify-between text-xs text-neutral-600 mb-1">
+              <span>Rating strength</span>
+              <span>{(displayRating/5 * 100).toFixed(0)}%</span>
+            </div>
+            <Progress value={displayRating/5 * 100} className="h-2" />
           </div>
         )}
       </div>
@@ -206,30 +286,78 @@ export function PerformanceSummary({
           <div className="bg-white p-4 rounded-md border border-neutral-100 shadow-sm">
             {renderStars()}
             
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-neutral-700 mb-2">
-                Provide feedback (optional)
-              </label>
-              <Textarea
-                placeholder="What did you like or dislike about the AI negotiator's performance?"
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                className="resize-none bg-neutral-50 focus:bg-white"
-                rows={4}
-              />
+            <div className="mt-6 space-y-3">
+              <div>
+                <Label className="text-sm font-medium text-neutral-700 mb-2">
+                  Provide feedback (optional)
+                </Label>
+                <Textarea
+                  placeholder="What did you like or dislike about the AI negotiator's performance?"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  className="resize-none bg-neutral-50 focus:bg-white"
+                  rows={4}
+                />
+              </div>
+              
+              {feedback.length > 0 && (
+                <div className="text-xs text-right text-neutral-500">
+                  {feedback.length} characters
+                </div>
+              )}
+              
+              {/* Feedback prompts to help users */}
+              <div className="pt-2 space-y-2">
+                <p className="text-sm text-neutral-600">Suggested feedback topics:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    "Communication style",
+                    "Negotiation tactics",
+                    "Understanding objectives",
+                    "Response quality",
+                    "Price negotiation"
+                  ].map((topic) => (
+                    <button
+                      key={topic}
+                      type="button"
+                      onClick={() => setFeedback(prev => 
+                        prev + (prev ? "\n\n" : "") + `${topic}: `
+                      )}
+                      className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 py-1 px-2 rounded-full transition-colors"
+                    >
+                      + {topic}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </CardContent>
-      <CardFooter className="flex justify-end px-4 sm:px-6 py-4 bg-neutral-50/70 border-t border-neutral-100">
+      <CardFooter className="flex flex-col sm:flex-row gap-4 items-center justify-between px-4 sm:px-6 py-4 bg-neutral-50/70 border-t border-neutral-100">
+        <div className="text-xs text-neutral-500 w-full sm:w-auto">
+          {rating > 0 ? (
+            <div className="flex items-center gap-1">
+              <CheckCheck className="h-3 w-3 text-green-500" />
+              <span>Ready to submit your {rating}-star rating</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3 text-amber-500" />
+              <span>Please select a star rating to continue</span>
+            </div>
+          )}
+        </div>
+        
         <Button 
           className="w-full sm:w-auto" 
           onClick={() => submitRating()}
           disabled={rating === 0 || isPending}
+          size="lg"
         >
           {isPending ? (
             <>
-              <span className="animate-pulse mr-2">⏳</span>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Submitting...
             </>
           ) : (

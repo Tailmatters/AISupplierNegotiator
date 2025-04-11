@@ -1,23 +1,105 @@
 import OpenAI from "openai";
+import { backOff } from 'exponential-backoff';
 
 // Initialize OpenAI API client with better error handling
 let openai: OpenAI;
+let isOpenAIConfigured = false;
+
 try {
   if (!process.env.OPENAI_API_KEY) {
     console.warn("Warning: OPENAI_API_KEY is not set. AI negotiation features will return simulated responses.");
+  } else {
+    openai = new OpenAI({ 
+      apiKey: process.env.OPENAI_API_KEY 
+    });
+    isOpenAIConfigured = true;
+    console.log("OpenAI client initialized successfully");
   }
-  openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key" 
-  });
 } catch (error) {
   console.error("Failed to initialize OpenAI client:", error);
-  // Create a dummy OpenAI instance that will be handled in the fallback logic
+}
+
+// If OpenAI wasn't configured successfully, create a placeholder instance
+if (!isOpenAIConfigured) {
   openai = {} as OpenAI;
 }
 
 // Model to use for all API calls
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const MODEL = "gpt-4o";
+
+// Fallback model for simpler requests if main model fails
+const FALLBACK_MODEL = "gpt-3.5-turbo";
+
+// Maximum number of retries for API calls
+const MAX_RETRIES = 3;
+
+// Helper function to categorize errors
+function categorizeOpenAIError(error: any): string {
+  if (!error) return 'unknown';
+  
+  if (error.status === 401) return 'authentication';
+  if (error.status === 429) return 'rate_limit';
+  if (error.status === 500) return 'server';
+  if (error.status === 503) return 'service_unavailable';
+  
+  const message = error.message?.toLowerCase() || '';
+  if (message.includes('timeout')) return 'timeout';
+  if (message.includes('network')) return 'network';
+  if (message.includes('capacity')) return 'capacity';
+  
+  return 'unknown';
+}
+
+// Wrapper function to handle OpenAI API calls with retries and fallbacks
+async function makeOpenAIRequest<T>(
+  requestFn: () => Promise<T>,
+  fallbackFn?: () => Promise<T>,
+  errorMessage: string = "OpenAI API request failed"
+): Promise<T> {
+  if (!isOpenAIConfigured) {
+    throw new Error("OpenAI API is not configured. Please set OPENAI_API_KEY environment variable.");
+  }
+  
+  try {
+    // Use exponential backoff for retries
+    return await backOff(() => requestFn(), {
+      numOfAttempts: MAX_RETRIES,
+      startingDelay: 1000,
+      timeMultiple: 2,
+      retry: (error) => {
+        const errorType = categorizeOpenAIError(error);
+        
+        // Retry on rate limits, timeouts, capacity issues, and unknown server errors
+        const shouldRetry = ['rate_limit', 'timeout', 'capacity', 'server', 'service_unavailable', 'network'].includes(errorType);
+        
+        if (shouldRetry) {
+          console.log(`Retrying OpenAI API call due to ${errorType} error...`);
+        }
+        
+        return shouldRetry;
+      }
+    });
+  } catch (error: any) {
+    console.error(`${errorMessage}:`, error);
+    
+    const errorType = categorizeOpenAIError(error);
+    console.log(`OpenAI request failed with error type: ${errorType}`);
+    
+    // Try fallback function if available
+    if (fallbackFn) {
+      try {
+        console.log("Attempting fallback for OpenAI request...");
+        return await fallbackFn();
+      } catch (fallbackError) {
+        console.error("Fallback also failed:", fallbackError);
+        throw new Error(`${errorMessage} (with fallback): ${error?.message || 'Unknown error'}`);
+      }
+    }
+    
+    throw new Error(`${errorMessage}: ${error?.message || 'Unknown error'}`);
+  }
+}
 
 // System prompts for different negotiation contexts
 const SYSTEM_PROMPTS = {
@@ -208,6 +290,41 @@ export async function analyzeNegotiationResult(
  * @param description Additional context about the purchase
  * @returns Structured Porter's Five Forces analysis
  */
+// Default fallback for Porter's Five Forces analysis
+const DEFAULT_FIVE_FORCES_ANALYSIS = {
+  threatOfNewEntrants: {
+    level: 'Medium' as const,
+    analysis: 'Analysis could not be generated. Consider researching industry barriers to entry.',
+    implications: ['Research industry-specific barriers to entry', 'Consider typical startup costs in the industry']
+  },
+  bargainingPowerOfBuyers: {
+    level: 'Medium' as const,
+    analysis: 'Analysis could not be generated. Consider researching buyer concentration and switching costs.',
+    implications: ['Evaluate how many buyers exist in the market', 'Research typical buyer switching costs']
+  },
+  threatOfSubstitutes: {
+    level: 'Medium' as const,
+    analysis: 'Analysis could not be generated. Consider researching available alternatives.',
+    implications: ['Identify potential substitute products/services', 'Assess price-performance trade-offs']
+  },
+  bargainingPowerOfSuppliers: {
+    level: 'Medium' as const,
+    analysis: 'Analysis could not be generated. Consider researching supplier concentration and uniqueness.',
+    implications: ['Review the number of suppliers in the market', 'Evaluate forward integration possibility']
+  },
+  competitiveRivalry: {
+    level: 'Medium' as const,
+    analysis: 'Analysis could not be generated. Consider researching competition intensity.',
+    implications: ['Assess industry growth rate', 'Evaluate industry concentration']
+  },
+  overallAssessment: 'A comprehensive market assessment could not be generated. Consider researching industry dynamics and supplier landscape manually.',
+  negotiationStrategies: [
+    'Research the supplier market thoroughly before negotiation',
+    'Prepare alternative options to improve your negotiation position',
+    'Consider industry benchmarks for pricing and terms'
+  ]
+};
+
 export async function generatePortersFiveForces(
   category: string,
   subcategory?: string,
@@ -242,55 +359,56 @@ export async function generatePortersFiveForces(
   overallAssessment: string;
   negotiationStrategies: string[];
 }> {
-  try {
-    // Create full category path for better context
-    const fullCategory = [category, subcategory, subcategoryLevel3]
-      .filter(Boolean)
-      .join(" > ");
+  // Create full category path for better context
+  const fullCategory = [category, subcategory, subcategoryLevel3]
+    .filter(Boolean)
+    .join(" > ");
+  
+  const prompt = `
+    Generate a Porter's Five Forces analysis for the following procurement category: ${fullCategory}
+    ${description ? `\nAdditional context: ${description}` : ''}
     
-    const prompt = `
-      Generate a Porter's Five Forces analysis for the following procurement category: ${fullCategory}
-      ${description ? `\nAdditional context: ${description}` : ''}
-      
-      For each of the five forces, provide:
-      1. An assessment level (Low, Medium, or High)
-      2. A concise analysis explaining the reasoning
-      3. Specific implications for negotiation
-      
-      Finally, provide an overall assessment and recommended negotiation strategies.
-      
-      Format your response as JSON with the following structure:
-      {
-        "threatOfNewEntrants": {
-          "level": "Low/Medium/High",
-          "analysis": "concise explanation",
-          "implications": ["implication 1", "implication 2", ...]
-        },
-        "bargainingPowerOfBuyers": {
-          "level": "Low/Medium/High",
-          "analysis": "concise explanation",
-          "implications": ["implication 1", "implication 2", ...]
-        },
-        "threatOfSubstitutes": {
-          "level": "Low/Medium/High",
-          "analysis": "concise explanation",
-          "implications": ["implication 1", "implication 2", ...]
-        },
-        "bargainingPowerOfSuppliers": {
-          "level": "Low/Medium/High",
-          "analysis": "concise explanation",
-          "implications": ["implication 1", "implication 2", ...]
-        },
-        "competitiveRivalry": {
-          "level": "Low/Medium/High",
-          "analysis": "concise explanation",
-          "implications": ["implication 1", "implication 2", ...]
-        },
-        "overallAssessment": "summary of market dynamics and negotiation position",
-        "negotiationStrategies": ["strategy 1", "strategy 2", ...]
-      }
-    `;
+    For each of the five forces, provide:
+    1. An assessment level (Low, Medium, or High)
+    2. A concise analysis explaining the reasoning
+    3. Specific implications for negotiation
     
+    Finally, provide an overall assessment and recommended negotiation strategies.
+    
+    Format your response as JSON with the following structure:
+    {
+      "threatOfNewEntrants": {
+        "level": "Low/Medium/High",
+        "analysis": "concise explanation",
+        "implications": ["implication 1", "implication 2", ...]
+      },
+      "bargainingPowerOfBuyers": {
+        "level": "Low/Medium/High",
+        "analysis": "concise explanation",
+        "implications": ["implication 1", "implication 2", ...]
+      },
+      "threatOfSubstitutes": {
+        "level": "Low/Medium/High",
+        "analysis": "concise explanation",
+        "implications": ["implication 1", "implication 2", ...]
+      },
+      "bargainingPowerOfSuppliers": {
+        "level": "Low/Medium/High",
+        "analysis": "concise explanation",
+        "implications": ["implication 1", "implication 2", ...]
+      },
+      "competitiveRivalry": {
+        "level": "Low/Medium/High",
+        "analysis": "concise explanation",
+        "implications": ["implication 1", "implication 2", ...]
+      },
+      "overallAssessment": "summary of market dynamics and negotiation position",
+      "negotiationStrategies": ["strategy 1", "strategy 2", ...]
+    }
+  `;
+  
+  // Primary request function using the main model
+  const primaryRequest = async () => {
     const completion = await openai.chat.completions.create({
       model: MODEL,
       messages: [
@@ -336,37 +454,83 @@ export async function generatePortersFiveForces(
       overallAssessment: content.overallAssessment || 'Assessment not available',
       negotiationStrategies: content.negotiationStrategies || []
     };
-  } catch (error: any) {
-    console.error("Error generating Porter's Five Forces analysis:", error);
-    // Return a default structure in case of error
+  };
+  
+  // Fallback request using a simpler model
+  const fallbackRequest = async () => {
+    // Try with a simpler model and more concise prompt
+    const simplifiedPrompt = `Analyze procurement category: ${fullCategory}. 
+    Provide a basic Porter's Five Forces analysis with Low/Medium/High ratings and brief explanations.`;
+    
+    const completion = await openai.chat.completions.create({
+      model: FALLBACK_MODEL,
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a market analysis assistant. Provide brief insights in JSON format." 
+        },
+        { role: "user", content: simplifiedPrompt }
+      ],
+      response_format: { type: "json_object" },
+    });
+    
+    const contentStr = completion.choices[0].message.content || '{}';
+    let content;
+    
+    try {
+      content = JSON.parse(contentStr);
+    } catch (e) {
+      console.error("Failed to parse fallback JSON response:", e);
+      return DEFAULT_FIVE_FORCES_ANALYSIS;
+    }
+    
+    // Try to extract information from whatever format we got back
     return {
       threatOfNewEntrants: {
-        level: 'Medium',
-        analysis: 'Analysis could not be generated due to an error.',
-        implications: ['Consider researching this aspect manually']
+        level: (content.threatOfNewEntrants?.level || content.threat_of_new_entrants?.level || 'Medium') as 'Low' | 'Medium' | 'High',
+        analysis: content.threatOfNewEntrants?.analysis || content.threat_of_new_entrants?.analysis || 'Simplified analysis not available',
+        implications: content.threatOfNewEntrants?.implications || content.threat_of_new_entrants?.implications || ['Research barriers to entry in this industry']
       },
       bargainingPowerOfBuyers: {
-        level: 'Medium',
-        analysis: 'Analysis could not be generated due to an error.',
-        implications: ['Consider researching this aspect manually']
+        level: (content.bargainingPowerOfBuyers?.level || content.buyer_power?.level || 'Medium') as 'Low' | 'Medium' | 'High',
+        analysis: content.bargainingPowerOfBuyers?.analysis || content.buyer_power?.analysis || 'Simplified analysis not available',
+        implications: content.bargainingPowerOfBuyers?.implications || content.buyer_power?.implications || ['Assess your value proposition to buyers']
       },
       threatOfSubstitutes: {
-        level: 'Medium',
-        analysis: 'Analysis could not be generated due to an error.',
-        implications: ['Consider researching this aspect manually']
+        level: (content.threatOfSubstitutes?.level || content.threat_of_substitutes?.level || 'Medium') as 'Low' | 'Medium' | 'High',
+        analysis: content.threatOfSubstitutes?.analysis || content.threat_of_substitutes?.analysis || 'Simplified analysis not available',
+        implications: content.threatOfSubstitutes?.implications || content.threat_of_substitutes?.implications || ['Identify alternative products/services']
       },
       bargainingPowerOfSuppliers: {
-        level: 'Medium',
-        analysis: 'Analysis could not be generated due to an error.',
-        implications: ['Consider researching this aspect manually']
+        level: (content.bargainingPowerOfSuppliers?.level || content.supplier_power?.level || 'Medium') as 'Low' | 'Medium' | 'High',
+        analysis: content.bargainingPowerOfSuppliers?.analysis || content.supplier_power?.analysis || 'Simplified analysis not available',
+        implications: content.bargainingPowerOfSuppliers?.implications || content.supplier_power?.implications || ['Evaluate supplier concentration']
       },
       competitiveRivalry: {
-        level: 'Medium',
-        analysis: 'Analysis could not be generated due to an error.',
-        implications: ['Consider researching this aspect manually']
+        level: (content.competitiveRivalry?.level || content.competitive_rivalry?.level || 'Medium') as 'Low' | 'Medium' | 'High',
+        analysis: content.competitiveRivalry?.analysis || content.competitive_rivalry?.analysis || 'Simplified analysis not available',
+        implications: content.competitiveRivalry?.implications || content.competitive_rivalry?.implications || ['Research industry competition']
       },
-      overallAssessment: 'Unable to generate an assessment due to an error.',
-      negotiationStrategies: ['Consider a standard negotiation approach based on best practices']
+      overallAssessment: content.overallAssessment || content.overall_assessment || 'A simplified assessment could not be generated.',
+      negotiationStrategies: content.negotiationStrategies || content.negotiation_strategies || content.strategies || ['Research the market before negotiation']
     };
+  };
+  
+  // If OpenAI is not configured, return default analysis
+  if (!isOpenAIConfigured) {
+    console.log("OpenAI not configured, returning default Porter's Five Forces analysis");
+    return DEFAULT_FIVE_FORCES_ANALYSIS;
+  }
+  
+  try {
+    // Use our robust error handling wrapper
+    return await makeOpenAIRequest(
+      primaryRequest,
+      fallbackRequest,
+      "Failed to generate Porter's Five Forces analysis"
+    );
+  } catch (error) {
+    console.error("All attempts to generate Porter's Five Forces analysis failed:", error);
+    return DEFAULT_FIVE_FORCES_ANALYSIS;
   }
 }
