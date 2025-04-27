@@ -1,169 +1,107 @@
-import { ClassValue, clsx } from 'clsx'
+import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { formatDistanceToNow, format, parseISO } from 'date-fns'
 
 /**
- * Combines class names with tailwind-merge for optimal class merging
+ * Merges multiple class names and Tailwind CSS classes efficiently
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Formats a date as a relative string (e.g., "5 minutes ago")
+ * Format a date string in a consistent way
  */
-export function formatRelativeTime(dateString?: string | Date): string {
-  if (!dateString) return ''
-  
-  const date = typeof dateString === 'string' ? parseISO(dateString) : dateString
-  return formatDistanceToNow(date, { addSuffix: true })
+export function formatDate(date: Date | string): string {
+  return new Date(date).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 /**
- * Formats a date with a custom format
+ * Format currency amount with proper currency symbol and decimal places
  */
-export function formatDate(
-  dateString?: string | Date,
-  dateFormat = 'MMM d, yyyy'
-): string {
-  if (!dateString) return ''
+export function formatCurrency(amount: number | string, currency: string = 'USD'): string {
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
   
-  const date = typeof dateString === 'string' ? parseISO(dateString) : dateString
-  return format(date, dateFormat)
-}
-
-/**
- * Formats a currency value
- */
-export function formatCurrency(amount: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 2,
-  }).format(amount)
+  }).format(numAmount)
 }
 
 /**
- * Formats a number with a specific format
+ * Format a number with commas for thousands separators
  */
-export function formatNumber(
-  number: number,
-  options: Intl.NumberFormatOptions = {}
-): string {
-  return new Intl.NumberFormat('en-US', options).format(number)
-}
-
-/**
- * Formats a percentage value
- */
-export function formatPercent(value: number, digits = 1): string {
-  return `${value.toFixed(digits)}%`
-}
-
-/**
- * Truncates a string to a specified length
- */
-export function truncateString(str: string, length = 100): string {
-  return str.length > length ? `${str.substring(0, length)}...` : str
-}
-
-/**
- * Creates a delay promise
- */
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/**
- * Safely parses JSON without throwing errors
- */
-export function safelyParseJSON<T>(json: string, fallback: T): T {
-  try {
-    return JSON.parse(json)
-  } catch (e) {
-    return fallback
-  }
-}
-
-/**
- * Deep merges objects
- */
-export function deepMerge<T extends object = object>(target: T, ...sources: object[]): T {
-  if (!sources.length) return target
+export function formatNumber(num: number | string): string {
+  const numValue = typeof num === 'string' ? parseFloat(num) : num
   
-  const source = sources.shift()
-  
-  if (source === undefined) {
-    return target
-  }
-  
-  if (isMergeableObject(target) && isMergeableObject(source)) {
-    Object.keys(source).forEach((key) => {
-      if (isMergeableObject(source[key])) {
-        if (!target[key]) Object.assign(target, { [key]: {} })
-        deepMerge(target[key], source[key])
-      } else {
-        Object.assign(target, { [key]: source[key] })
-      }
-    })
-  }
-  
-  return deepMerge(target, ...sources)
-}
-
-function isMergeableObject(item: any): item is Record<string, any> {
-  return item && typeof item === 'object' && !Array.isArray(item)
+  return new Intl.NumberFormat('en-US').format(numValue)
 }
 
 /**
- * Groups an array by a specific key
+ * Truncate text to a certain length with ellipsis
  */
-export function groupBy<T, K extends keyof any>(
-  array: T[],
-  getKey: (item: T) => K
-): Record<K, T[]> {
-  return array.reduce((result, item) => {
-    const key = getKey(item)
-    if (!result[key]) {
-      result[key] = []
-    }
-    result[key].push(item)
-    return result
-  }, {} as Record<K, T[]>)
-}
-
-/**
- * Creates a debounced version of a function
- */
-export function debounce<T extends (...args: any[]) => any>(
-  fn: T,
-  ms = 300
-): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout>
+export function truncateText(text: string, maxLength: number = 100): string {
+  if (text.length <= maxLength) return text
   
-  return function(...args: Parameters<T>) {
-    clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => fn(...args), ms)
-  }
+  return `${text.slice(0, maxLength)}...`
 }
 
 /**
- * Creates an array of numbers in range
+ * Generate a random string of specified length
  */
-export function range(start: number, end: number): number[] {
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
-}
-
-/**
- * Generates a random string
- */
-export function generateRandomString(length = 8): string {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+export function generateRandomString(length: number = 10): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   let result = ''
   
   for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length))
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   
   return result
+}
+
+/**
+ * Check if an email is valid
+ */
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+/**
+ * Capitalize the first letter of each word in a string
+ */
+export function capitalizeWords(str: string): string {
+  return str
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+/**
+ * Deep clone an object
+ */
+export function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+/**
+ * Delay execution for a specified number of milliseconds
+ */
+export function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Get initials from a name (e.g., "John Doe" -> "JD")
+ */
+export function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(part => part.charAt(0))
+    .join('')
+    .toUpperCase()
 }
