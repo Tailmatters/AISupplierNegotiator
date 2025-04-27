@@ -1,34 +1,37 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+ 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
   }).format(amount);
 }
 
-export function formatPercentage(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'percent',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value / 100);
+export function formatNumber(number: number): string {
+  return new Intl.NumberFormat('en-US').format(number);
 }
 
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric'
+  }).format(d);
+}
+
+export function formatPercentage(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)}%`;
+}
+
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trim()}...`;
 }
 
 export function getInitials(name: string): string {
@@ -37,45 +40,53 @@ export function getInitials(name: string): string {
     .map((n) => n[0])
     .join('')
     .toUpperCase()
-    .substring(0, 2);
+    .slice(0, 2);
 }
 
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
-
-export function calculateSavings(initialOffer: number, finalOffer: number): number {
-  if (!initialOffer || !finalOffer) return 0;
-  return ((initialOffer - finalOffer) / initialOffer) * 100;
-}
-
-export function getRatingLabel(rating: number): string {
-  const labels = [
-    'Poor',
-    'Below Average',
-    'Average',
-    'Good',
-    'Excellent',
-  ];
-  const index = Math.min(Math.max(Math.round(rating) - 1, 0), 4);
-  return labels[index];
-}
-
-export function getStatusColor(status: string): string {
-  const statusColors: Record<string, string> = {
-    pending: 'text-yellow-500 bg-yellow-50',
-    active: 'text-blue-500 bg-blue-50',
-    completed: 'text-green-500 bg-green-50',
-    rejected: 'text-red-500 bg-red-50',
-    expired: 'text-gray-500 bg-gray-50',
-    draft: 'text-gray-500 bg-gray-50',
-    signed: 'text-green-500 bg-green-50',
-  };
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
   
-  return statusColors[status.toLowerCase()] || 'text-gray-500 bg-gray-50';
+  return function(...args: Parameters<T>) {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
 }
 
-export function getRandomId(): string {
+export function calculateSavings(initial: number, final: number): number {
+  if (initial <= 0) return 0;
+  return ((initial - final) / initial) * 100;
+}
+
+export function calculateAverage(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, val) => sum + val, 0) / values.length;
+}
+
+export function sortByProperty<T>(array: T[], property: keyof T, direction: 'asc' | 'desc' = 'asc'): T[] {
+  return [...array].sort((a, b) => {
+    const aValue = a[property];
+    const bValue = b[property];
+    
+    if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+export function groupByProperty<T>(array: T[], property: keyof T): Record<string, T[]> {
+  return array.reduce((groups, item) => {
+    const key = String(item[property]);
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(item);
+    return groups;
+  }, {} as Record<string, T[]>);
+}
+
+export function generateRandomId(): string {
   return Math.random().toString(36).substring(2, 10);
 }
