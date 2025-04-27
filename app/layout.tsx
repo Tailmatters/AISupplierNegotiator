@@ -4,38 +4,37 @@ import './globals.css'
 import { Providers } from '@/providers'
 import { Toaster } from '@/components/ui/toaster'
 
-// Configure the Inter font
+// Load Inter font with specific subsets
 const inter = Inter({ 
   subsets: ['latin'],
   variable: '--font-inter',
-  display: 'swap',
 })
 
+// Metadata for the application
 export const metadata: Metadata = {
-  title: 'ProcurementAI - AI-powered procurement negotiation platform',
-  description: 'Optimize supplier interactions through intelligent contract management, advanced analytics, and collaborative tools.',
+  title: 'Procurement AI Negotiator',
+  description: 'AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions through intelligent contract management, advanced analytics, and collaborative tools.',
   keywords: [
-    'AI negotiation',
     'procurement',
-    'supplier management',
+    'supplier negotiation',
+    'ai negotiator',
     'contract management',
     'spend analysis',
+    'supplier management',
+    'business intelligence',
     'procurement analytics',
-    'supplier collaboration',
-    'negotiations',
-    'purchasing',
-    'procurement software',
   ],
-  authors: [{ name: 'ProcurementAI Team' }],
-  creator: 'ProcurementAI',
-  publisher: 'ProcurementAI',
-  viewport: 'width=device-width, initial-scale=1',
-  applicationName: 'ProcurementAI',
-  formatDetection: {
-    telephone: false,
-  },
+  authors: [
+    {
+      name: 'Procurement AI Platform',
+      url: 'https://procurement-ai.vercel.app',
+    },
+  ],
+  creator: 'Procurement AI Platform',
+  publisher: 'Procurement AI Platform',
 }
 
+// Root layout component
 export default function RootLayout({
   children,
 }: {
@@ -43,7 +42,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.className} antialiased bg-background min-h-screen`}>
         <Providers>
           {children}
           <Toaster />

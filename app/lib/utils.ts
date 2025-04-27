@@ -38,18 +38,30 @@ export function formatDate(
   }
   
   // Format options based on the requested format
-  const options: Intl.DateTimeFormatOptions = {
-    short: { month: 'numeric', day: 'numeric', year: '2-digit' },
-    medium: { month: 'short', day: 'numeric', year: 'numeric' },
-    long: {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    },
-  }[format]
+  let options: Intl.DateTimeFormatOptions;
+  
+  if (format === 'short') {
+    options = { 
+      month: 'numeric' as const, 
+      day: 'numeric' as const, 
+      year: '2-digit' as const 
+    };
+  } else if (format === 'medium') {
+    options = { 
+      month: 'short' as const, 
+      day: 'numeric' as const, 
+      year: 'numeric' as const 
+    };
+  } else { // long
+    options = {
+      weekday: 'long' as const,
+      month: 'long' as const,
+      day: 'numeric' as const,
+      year: 'numeric' as const,
+      hour: 'numeric' as const,
+      minute: '2-digit' as const,
+    };
+  }
   
   return new Intl.DateTimeFormat('en-US', options).format(d)
 }
