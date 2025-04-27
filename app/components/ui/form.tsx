@@ -1,37 +1,21 @@
 "use client"
 
 import * as React from "react"
-import {
-  useForm as useHookForm,
-  UseFormProps,
-  SubmitHandler,
-  UseFormReturn,
-  FieldValues,
-  FieldPath,
-  FieldErrors,
-} from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { Slot } from "@radix-ui/react-slot"
-import { z } from "zod"
+import {
+  Controller,
+  ControllerProps,
+  FieldPath,
+  FieldValues,
+  FormProvider,
+  useFormContext,
+} from "react-hook-form"
 
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
-const Form = <
-  TFieldValues extends FieldValues = FieldValues,
-  TContext = any
->({
-  children,
-  ...props
-}: UseFormProps<TFieldValues, TContext> & {
-  children: (methods: UseFormReturn<TFieldValues, TContext>) => React.ReactNode
-}) => {
-  const methods = useHookForm<TFieldValues, TContext>({
-    ...props,
-  })
-  return <>{children(methods)}</>
-}
+const Form = FormProvider
 
 type FormFieldContextValue<
   TFieldValues extends FieldValues = FieldValues,
@@ -49,13 +33,10 @@ const FormField = <
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
 >({
   ...props
-}: {
-  name: TName
-  children: React.ReactNode
-} & UseFormReturn<TFieldValues>) => {
+}: ControllerProps<TFieldValues, TName>) => {
   return (
     <FormFieldContext.Provider value={{ name: props.name }}>
-      {props.children}
+      <Controller {...props} />
     </FormFieldContext.Provider>
   )
 }
@@ -63,7 +44,7 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const { getFieldState, formState } = React.useContext(FormContext)
+  const { getFieldState, formState } = useFormContext()
 
   const fieldState = getFieldState(fieldContext.name, formState)
 
@@ -195,7 +176,3 @@ export {
   FormMessage,
   FormField,
 }
-
-const FormContext = React.createContext<UseFormReturn>(
-  {} as UseFormReturn
-)

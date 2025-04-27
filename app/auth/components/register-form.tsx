@@ -1,63 +1,81 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { useAuth } from '@/hooks/use-auth';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
+import * as React from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import { z } from "zod";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormMessage
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Loader2 } from 'lucide-react';
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useForm } from "react-hook-form";
 
 const registerSchema = z.object({
-  username: z.string().min(3, { message: 'Username must be at least 3 characters' }),
-  name: z.string().min(2, { message: 'Name must be at least 2 characters' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
-  confirmPassword: z.string()
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"]
+  username: z.string().min(3, {
+    message: "Username must be at least 3 characters.",
+  }),
+  name: z.string().min(2, {
+    message: "Name must be at least 2 characters.",
+  }),
+  email: z.string().email({
+    message: "Please enter a valid email address.",
+  }),
+  password: z.string().min(8, {
+    message: "Password must be at least 8 characters.",
+  }),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
-export default function RegisterForm() {
-  const { registerMutation } = useAuth();
+export function RegisterForm() {
+  const { register } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      username: '',
-      name: '',
-      password: '',
-      confirmPassword: ''
-    }
+      username: "",
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    },
   });
 
-  async function onSubmit(data: RegisterFormValues) {
+  const onSubmit = async (data: RegisterFormValues) => {
     try {
-      // Remove confirmPassword as it's not part of the API request
-      const { confirmPassword, ...registrationData } = data;
-      
-      await registerMutation.mutateAsync(registrationData);
-      toast({
-        title: 'Registration successful',
-        description: 'Your account has been created successfully',
-      });
+      setIsLoading(true);
+      const success = await register(data);
+      if (success) {
+        router.push("/");
+      }
     } catch (error) {
-      // Error is already handled by the mutation's onError
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to register",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <Form {...form}>
@@ -69,7 +87,11 @@ export default function RegisterForm() {
             <FormItem>
               <FormLabel>Username</FormLabel>
               <FormControl>
-                <Input placeholder="Create a username" {...field} />
+                <Input 
+                  placeholder="Enter a unique username" 
+                  {...field} 
+                  disabled={isLoading}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -82,8 +104,33 @@ export default function RegisterForm() {
             <FormItem>
               <FormLabel>Full Name</FormLabel>
               <FormControl>
-                <Input placeholder="Enter your full name" {...field} />
+                <Input 
+                  placeholder="Enter your full name" 
+                  {...field} 
+                  disabled={isLoading}
+                />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input 
+                  type="email"
+                  placeholder="Enter your email address" 
+                  {...field} 
+                  disabled={isLoading}
+                />
+              </FormControl>
+              <FormDescription>
+                We'll never share your email with anyone else.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -95,8 +142,16 @@ export default function RegisterForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Create a password" {...field} />
+                <Input
+                  type="password"
+                  placeholder="Create a password"
+                  {...field}
+                  disabled={isLoading}
+                />
               </FormControl>
+              <FormDescription>
+                Must be at least 8 characters long.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -108,7 +163,12 @@ export default function RegisterForm() {
             <FormItem>
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Confirm your password" {...field} />
+                <Input
+                  type="password"
+                  placeholder="Confirm your password"
+                  {...field}
+                  disabled={isLoading}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -116,16 +176,16 @@ export default function RegisterForm() {
         />
         <Button 
           type="submit" 
-          className="w-full mt-6" 
-          disabled={registerMutation.isPending}
+          className="w-full" 
+          disabled={isLoading}
         >
-          {registerMutation.isPending ? (
+          {isLoading ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Registering...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+              Creating Account...
             </>
           ) : (
-            'Create Account'
+            "Create Account"
           )}
         </Button>
       </form>

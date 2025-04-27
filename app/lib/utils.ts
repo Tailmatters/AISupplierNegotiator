@@ -1,122 +1,94 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-/**
- * Combines multiple class names into a single className string
- * Uses clsx for conditional classes and tailwind-merge to handle Tailwind conflicts
- */
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+ 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
-/**
- * Formats a date to a readable string
- * @param date - The date to format
- * @param options - Intl.DateTimeFormatOptions
- * @returns Formatted date string
- */
-export function formatDate(
-  date: Date | string,
-  options: Intl.DateTimeFormatOptions = {
-    month: "long",
+export function formatDate(date: Date) {
+  return date.toLocaleDateString("en-US", {
     day: "numeric",
+    month: "long",
     year: "numeric",
-  }
-): string {
-  if (!date) return "";
-  const dateObj = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("en-US", options).format(dateObj);
+  })
 }
 
-/**
- * Formats a currency value
- * @param amount - The amount to format
- * @param currency - Currency code (default: USD)
- * @returns Formatted currency string
- */
-export function formatCurrency(
-  amount: number,
-  currency: string = "USD"
-): string {
+export function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency,
-  }).format(amount);
+    currency: "USD",
+  }).format(amount)
 }
 
-/**
- * Truncates text to a specified length with ellipsis
- * @param text - The text to truncate
- * @param length - Maximum length before truncation
- * @returns Truncated text with ellipsis if needed
- */
-export function truncateText(text: string, length: number): string {
-  if (!text) return "";
-  return text.length > length ? `${text.substring(0, length)}...` : text;
+export function formatPercentage(value: number, digitsAfterDecimal = 1) {
+  return new Intl.NumberFormat("en-US", {
+    style: "percent",
+    minimumFractionDigits: digitsAfterDecimal,
+    maximumFractionDigits: digitsAfterDecimal, 
+  }).format(value / 100)
 }
 
-/**
- * Generates initials from a name (e.g., "John Doe" -> "JD")
- * @param name - The name to generate initials from
- * @returns Initials string
- */
-export function getInitials(name: string): string {
-  if (!name) return "";
+export function truncateText(text: string, maxLength: number) {
+  if (text.length <= maxLength) return text
+  return text.slice(0, maxLength) + "..."
+}
+
+export function getInitials(name?: string): string {
+  if (!name) return ""
   return name
     .split(" ")
-    .map((part) => part.charAt(0).toUpperCase())
+    .map((part) => part.charAt(0))
     .join("")
-    .substring(0, 2);
+    .toUpperCase()
+    .slice(0, 2)
 }
 
-/**
- * Calculates the percentage difference between two numbers
- * @param current - Current value
- * @param previous - Previous value
- * @returns Percentage change as a number
- */
-export function calculatePercentChange(
-  current: number,
-  previous: number
-): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return ((current - previous) / Math.abs(previous)) * 100;
+export function calculateSavings(initialAmount: number, finalAmount: number): number {
+  if (initialAmount <= 0) return 0
+  const savings = initialAmount - finalAmount
+  return Math.max(0, savings)
 }
 
-/**
- * Formats a number with thousand separators and decimal places
- * @param value - The number to format
- * @param decimals - Number of decimal places (default: 0)
- * @returns Formatted number string
- */
-export function formatNumber(value: number, decimals: number = 0): string {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
+export function calculateSavingsPercentage(initialAmount: number, finalAmount: number): number {
+  if (initialAmount <= 0) return 0
+  const savings = initialAmount - finalAmount
+  return (savings / initialAmount) * 100
 }
 
-/**
- * Debounces a function call
- * @param func - The function to debounce
- * @param wait - Timeout in milliseconds
- * @returns Debounced function
- */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
+export function generateStarRating(score: number): {
+  stars: number,
+  description: string
+} {
+  // Ensure score is between 0 and 100
+  const normalizedScore = Math.min(100, Math.max(0, score))
   
-  return function(...args: Parameters<T>): void {
-    const later = () => {
-      timeout = null;
-      func(...args);
-    };
-    
-    if (timeout !== null) {
-      clearTimeout(timeout);
-    }
-    timeout = setTimeout(later, wait);
-  };
+  // Convert to 0-5 star rating
+  const stars = Math.round(normalizedScore / 20)
+  
+  // Generate description based on star rating
+  let description = ""
+  switch (stars) {
+    case 0:
+      description = "Poor"
+      break
+    case 1:
+      description = "Below expectations"
+      break
+    case 2:
+      description = "Fair"
+      break
+    case 3:
+      description = "Good"
+      break
+    case 4:
+      description = "Very good"
+      break
+    case 5:
+      description = "Excellent"
+      break
+    default:
+      description = "Not rated"
+  }
+  
+  return { stars, description }
 }
