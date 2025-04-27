@@ -1,16 +1,19 @@
-import { NextResponse } from 'next/server'
-import { logout } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { clearToken } from '@/lib/auth'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    // Clear the auth cookie
-    await logout()
+    // Clear the JWT token from cookies
+    await clearToken()
     
-    return NextResponse.json({ message: 'Logged out successfully' }, { status: 200 })
+    return NextResponse.json(
+      { message: 'Logged out successfully' },
+      { status: 200 }
+    )
   } catch (error) {
     console.error('Logout error:', error)
     return NextResponse.json(
-      { error: 'An error occurred during logout' },
+      { message: 'Logout failed' },
       { status: 500 }
     )
   }

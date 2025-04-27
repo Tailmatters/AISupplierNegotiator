@@ -1,17 +1,19 @@
-import { Pool, neonConfig } from '@neondatabase/serverless'
+import { neon, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-serverless'
 import * as schema from '@/schema'
 import ws from 'ws'
 
-// Configure Neon to use WebSockets
-neonConfig.webSocketConstructor = ws
+// Configure neon to use WebSockets in edge runtime
+neonConfig.webSocketConstructor = ws as any
 
 if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is not set')
+  throw new Error(
+    'DATABASE_URL environment variable is not set. Please set it in your .env file.'
+  )
 }
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-})
+// Create a Neon client
+const sql = neon(process.env.DATABASE_URL)
 
-export const db = drizzle(pool, { schema })
+// Create a Drizzle client
+export const db = drizzle(sql, { schema })

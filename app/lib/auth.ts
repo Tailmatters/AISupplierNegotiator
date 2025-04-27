@@ -1,26 +1,21 @@
-'use server'
-
-import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
+import { NextRequest } from 'next/server'
+import { SignJWT, jwtVerify } from 'jose'
 import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
 import { promisify } from 'util'
 import { db } from '@/lib/db'
-import { users } from '@/schema'
+import { users, User } from '@/schema'
 import { eq } from 'drizzle-orm'
 
-// Convert callback-based scrypt to Promise-based
+// Constants
+const TOKEN_NAME = 'auth_token'
+const TOKEN_MAX_AGE = 60 * 60 * 24 * 7 // 7 days in seconds
+const SECRET_KEY = process.env.SESSION_SECRET || 'your-fallback-secret-key-should-be-at-least-32-chars'
+
+// Helper for scrypt (to support Promises)
 const scryptAsync = promisify(scrypt)
 
-// Name of the cookie that stores the auth token
-const AUTH_COOKIE_NAME = 'auth_token'
-
-// JWT settings
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || 'fallback_secret_only_for_development'
-)
-const JWT_EXPIRY = '7d' // Token expires after 7 days
-
-// Type for JWT payload
+// JWT payload interface
 interface JWTPayload {
   userId: number
   username: string
@@ -31,126 +26,113 @@ interface JWTPayload {
  * Hash a password using scrypt
  */
 export async function hashPassword(password: string): Promise<string> {
-  // Generate a random salt
   const salt = randomBytes(16).toString('hex')
-  
-  // Hash the password with the salt
-  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer
-  
-  // Return both the derived key and salt, joining with a period
-  return `${derivedKey.toString('hex')}.${salt}`
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer
+  return `${buf.toString('hex')}.${salt}`
 }
 
 /**
- * Compare a password with a stored hash
+ * Compare a password with a hashed password
  */
 export async function comparePasswords(
-  providedPassword: string,
-  storedHash: string
+  password: string,
+  hashedPassword: string
 ): Promise<boolean> {
-  try {
-    // Split the stored hash into the hash and the salt
-    const [hashedPassword, salt] = storedHash.split('.')
-    
-    // Hash the provided password with the same salt
-    const derivedKey = (await scryptAsync(providedPassword, salt, 64)) as Buffer
-    
-    // Compare the hashed provided password with the stored hash
-    const storedKey = Buffer.from(hashedPassword, 'hex')
-    
-    // Use timingSafeEqual to avoid timing attacks
-    return timingSafeEqual(derivedKey, storedKey)
-  } catch (error) {
-    console.error('Error comparing passwords:', error)
-    return false
-  }
+  const [hash, salt] = hashedPassword.split('.')
+  const hashBuffer = Buffer.from(hash, 'hex')
+  const suppliedBuffer = (await scryptAsync(password, salt, 64)) as Buffer
+  return timingSafeEqual(hashBuffer, suppliedBuffer)
 }
 
 /**
- * Create a JWT token for a user and store it in a cookie
+ * Create a JWT token for a user and set it as a cookie
  */
-export async function createToken(user: { id: number; username: string; role: string }): Promise<string> {
-  try {
-    // Create the JWT payload
-    const payload: JWTPayload = {
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-    }
-    
-    // Sign the JWT
-    const token = await new SignJWT(payload)
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime(JWT_EXPIRY)
-      .sign(JWT_SECRET)
-    
-    // Store the token in a cookie
-    cookies().set({
-      name: AUTH_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      path: '/',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 7 days in seconds
-    })
-    
-    return token
-  } catch (error) {
-    console.error('Error creating token:', error)
-    throw new Error('Failed to create authentication token')
+export async function createToken(user: User): Promise<void> {
+  // Create the payload
+  const payload: JWTPayload = {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
   }
+
+  // Create the JWT
+  const token = await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(`${TOKEN_MAX_AGE}s`)
+    .sign(new TextEncoder().encode(SECRET_KEY))
+
+  // Set the cookie
+  cookies().set({
+    name: TOKEN_NAME,
+    value: token,
+    httpOnly: true,
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: TOKEN_MAX_AGE,
+    sameSite: 'lax',
+  })
 }
 
 /**
- * Get the current user from the auth token in the cookie
- * Returns null if no user is authenticated
+ * Clear the auth token cookie
  */
-export async function getUserFromToken() {
+export async function clearToken(): Promise<void> {
+  cookies().delete(TOKEN_NAME)
+}
+
+/**
+ * Get the JWT payload from the request cookies
+ */
+export async function getTokenPayload(
+  request?: NextRequest
+): Promise<JWTPayload | null> {
   try {
-    // Get the token from the cookie
-    const token = cookies().get(AUTH_COOKIE_NAME)
-    
-    // If no token, user is not authenticated
+    // Get the token from cookies
+    const cookieStore = request ? request.cookies : cookies()
+    const token = cookieStore.get(TOKEN_NAME)?.value
+
     if (!token) {
       return null
     }
-    
+
     // Verify the token
-    const { payload } = await jwtVerify(token.value, JWT_SECRET)
-    const { userId } = payload as JWTPayload
-    
-    // Get the user from the database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1)
-    
-    // If no user found, return null
-    if (!user) {
-      return null
-    }
-    
-    // Remove the password from the user object
-    const { password, ...userWithoutPassword } = user
-    
-    return userWithoutPassword
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(SECRET_KEY)
+    )
+
+    return payload as JWTPayload
   } catch (error) {
-    console.error('Error getting user from token:', error)
+    console.error('Token validation error:', error)
     return null
   }
 }
 
 /**
- * Log out the current user by removing the auth cookie
+ * Get the current user from the request cookies
  */
-export async function logout(): Promise<void> {
+export async function getCurrentUser(
+  request?: NextRequest
+): Promise<User | null> {
   try {
-    // Delete the auth cookie
-    cookies().delete(AUTH_COOKIE_NAME)
+    // Get the token payload
+    const payload = await getTokenPayload(request)
+
+    if (!payload) {
+      return null
+    }
+
+    // Get the user from the database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, payload.userId))
+      .limit(1)
+
+    return user || null
   } catch (error) {
-    console.error('Error logging out:', error)
-    throw new Error('Failed to log out')
+    console.error('Get current user error:', error)
+    return null
   }
 }
