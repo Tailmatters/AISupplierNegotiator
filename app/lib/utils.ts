@@ -1,250 +1,165 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { formatDistanceToNow, format, parseISO } from 'date-fns'
 
 /**
  * Combines class names with Tailwind CSS
- * @param inputs Class names to combine
- * @returns Combined class names string
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Formats a date using Intl.DateTimeFormat
- * @param date Date to format
- * @param options Options for the formatter
- * @returns Formatted date string
+ * Format a date as relative time (e.g., "2 days ago")
+ */
+export function formatRelativeDate(dateString: string | Date): string {
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString
+  return formatDistanceToNow(date, { addSuffix: true })
+}
+
+/**
+ * Format a date in a specific format
  */
 export function formatDate(
-  date: Date | string | number,
-  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
+  dateString: string | Date,
+  formatString: string = 'PPP'
 ): string {
-  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
-  return new Intl.DateTimeFormat('en-US', options).format(d)
+  const date = typeof dateString === 'string' ? parseISO(dateString) : dateString
+  return format(date, formatString)
 }
 
 /**
- * Formats currency values
- * @param value Number to format
- * @param currency Currency code (default: USD)
- * @param options Options for the formatter
- * @returns Formatted currency string
+ * Format a currency value
  */
 export function formatCurrency(
-  value: number,
-  currency = 'USD',
-  options: Intl.NumberFormatOptions = {}
+  amount: number,
+  currency: string = 'USD',
+  locale: string = 'en-US'
 ): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-    ...options,
-  }).format(value)
+  }).format(amount)
 }
 
 /**
- * Formats a number with commas
- * @param value Number to format
- * @returns Formatted number string
+ * Format a number with commas
  */
-export function formatNumber(value: number): string {
-  return new Intl.NumberFormat('en-US').format(value)
+export function formatNumber(
+  number: number,
+  locale: string = 'en-US'
+): string {
+  return new Intl.NumberFormat(locale).format(number)
 }
 
 /**
- * Formats a percentage value
- * @param value Number to format as percentage
- * @param options Options for the formatter
- * @returns Formatted percentage string
+ * Format a percentage
  */
 export function formatPercentage(
   value: number,
-  options: Intl.NumberFormatOptions = { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+  decimalPlaces: number = 1,
+  locale: string = 'en-US'
 ): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     style: 'percent',
-    ...options,
+    minimumFractionDigits: decimalPlaces,
+    maximumFractionDigits: decimalPlaces,
   }).format(value / 100)
 }
 
 /**
- * Calculates a savings amount from an original amount and a percentage
- * @param amount Original amount
- * @param percentage Savings percentage
- * @returns Amount saved
+ * Truncate a string to a specific length
  */
-export function calculateSavings(amount: number, percentage: number): number {
-  return amount * (percentage / 100)
+export function truncate(str: string, length: number): string {
+  return str.length > length ? `${str.substring(0, length)}...` : str
 }
 
 /**
- * Truncates a string to a specified length and adds ellipsis
- * @param str String to truncate
- * @param length Maximum length
- * @returns Truncated string
+ * Generate a random ID
  */
-export function truncateString(str: string, length: number): string {
-  if (str.length <= length) return str
-  return str.slice(0, length) + '...'
+export function generateId(): string {
+  return Math.random().toString(36).substring(2, 9)
 }
 
 /**
- * Creates a random color hex code
- * @returns Hex color code string
+ * Debounce a function
  */
-export function randomColor(): string {
-  return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`
-}
-
-/**
- * Generates an array of distinct colors for charts
- * @param count Number of colors to generate
- * @returns Array of hex color codes
- */
-export function generateChartColors(count: number): string[] {
-  // Predefined colors for first few items to ensure good contrast
-  const baseColors = [
-    '#3B82F6', // blue
-    '#10B981', // green
-    '#F59E0B', // amber
-    '#EF4444', // red
-    '#8B5CF6', // purple
-    '#14B8A6', // teal
-    '#F97316', // orange
-    '#6366F1', // indigo
-    '#EC4899', // pink
-  ]
-  
-  const colors = [...baseColors]
-  
-  // If we need more colors than the base set, generate them
-  for (let i = baseColors.length; i < count; i++) {
-    // Ensure we don't generate colors too similar to existing ones
-    let newColor
-    do {
-      newColor = randomColor()
-    } while (colors.includes(newColor))
-    
-    colors.push(newColor)
+export function debounce<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: NodeJS.Timeout
+  return function (...args: Parameters<T>) {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn(...args), delay)
   }
-  
-  return colors.slice(0, count)
 }
 
 /**
- * Groups an array of objects by a key
- * @param array Array to group
- * @param key Key to group by
- * @returns Object with grouped items
+ * Calculate the percentage difference between two numbers
+ */
+export function percentageDifference(current: number, previous: number): number {
+  if (previous === 0) return current === 0 ? 0 : 100
+  return ((current - previous) / previous) * 100
+}
+
+/**
+ * Group an array of objects by a key
  */
 export function groupBy<T>(array: T[], key: keyof T): Record<string, T[]> {
   return array.reduce((result, item) => {
-    const keyValue = String(item[key])
-    return {
-      ...result,
-      [keyValue]: [...(result[keyValue] || []), item],
+    const groupKey = String(item[key])
+    if (!result[groupKey]) {
+      result[groupKey] = []
     }
+    result[groupKey].push(item)
+    return result
   }, {} as Record<string, T[]>)
 }
 
 /**
- * Sums values in an array of objects by a specific key
- * @param array Array of objects
- * @param key Key to sum by
- * @returns Sum of values
+ * Sort an array of objects by a key
  */
-export function sumBy<T>(array: T[], key: keyof T): number {
-  return array.reduce((sum, item) => sum + Number(item[key] || 0), 0)
-}
-
-/**
- * Creates a debounced function
- * @param func Function to debounce
- * @param wait Wait time in milliseconds
- * @returns Debounced function
- */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null
-  
-  return function(...args: Parameters<T>) {
-    const later = () => {
-      timeout = null
-      func(...args)
+export function sortBy<T>(
+  array: T[],
+  key: keyof T,
+  direction: 'asc' | 'desc' = 'asc'
+): T[] {
+  return [...array].sort((a, b) => {
+    const aValue = a[key]
+    const bValue = b[key]
+    
+    if (aValue === bValue) return 0
+    
+    // Handle string comparison
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return direction === 'asc'
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue)
     }
     
-    if (timeout) clearTimeout(timeout)
-    timeout = setTimeout(later, wait)
-  }
+    // Handle number comparison
+    if (
+      (typeof aValue === 'number' && typeof bValue === 'number') ||
+      (aValue instanceof Date && bValue instanceof Date)
+    ) {
+      return direction === 'asc'
+        ? (aValue as any) - (bValue as any)
+        : (bValue as any) - (aValue as any)
+    }
+    
+    return 0
+  })
 }
 
 /**
- * Downloads data as a file
- * @param data Data to download
- * @param fileName Name of the file
- * @param contentType Content type of the file
+ * Filter undefined values from an object
  */
-export function downloadFile(data: string, fileName: string, contentType: string): void {
-  if (typeof window === 'undefined') return
-  
-  const blob = new Blob([data], { type: contentType })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  
-  a.href = url
-  a.download = fileName
-  document.body.appendChild(a)
-  a.click()
-  
-  // Cleanup
-  setTimeout(() => {
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, 0)
-}
-
-/**
- * Safely validates email format
- * @param email Email to validate
- * @returns True if valid email format
- */
-export function isValidEmail(email: string): boolean {
-  const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return pattern.test(email)
-}
-
-/**
- * Gets a human-readable file size
- * @param bytes File size in bytes
- * @returns Human-readable file size string
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes'
-  
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
-}
-
-/**
- * Generates a random ID string
- * @param length Length of the ID (default: 10)
- * @returns Random ID string
- */
-export function generateId(length = 10): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  
-  return result
+export function filterUndefined<T extends object>(obj: T): Partial<T> {
+  return Object.entries(obj).reduce((acc, [key, value]) => {
+    if (value !== undefined) {
+      acc[key as keyof T] = value
+    }
+    return acc
+  }, {} as Partial<T>)
 }
