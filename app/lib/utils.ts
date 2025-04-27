@@ -1,94 +1,48 @@
-import { type ClassValue, clsx } from "clsx"
+import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
- 
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatDate(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  })
-}
-
 export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
   }).format(amount)
 }
 
-export function formatPercentage(value: number, digitsAfterDecimal = 1) {
-  return new Intl.NumberFormat("en-US", {
-    style: "percent",
-    minimumFractionDigits: digitsAfterDecimal,
-    maximumFractionDigits: digitsAfterDecimal, 
-  }).format(value / 100)
+export function formatDate(date: Date | string) {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
-export function truncateText(text: string, maxLength: number) {
-  if (text.length <= maxLength) return text
-  return text.slice(0, maxLength) + "..."
+export function formatPercentage(value: number) {
+  return `${(value * 100).toFixed(1)}%`
 }
 
-export function getInitials(name?: string): string {
-  if (!name) return ""
+export function truncateText(text: string, length: number) {
+  if (text.length <= length) return text
+  return `${text.slice(0, length)}...`
+}
+
+export function isValidEmail(email: string) {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return regex.test(email)
+}
+
+export function generateUsername(name: string) {
   return name
-    .split(" ")
-    .map((part) => part.charAt(0))
-    .join("")
-    .toUpperCase()
-    .slice(0, 2)
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 20)
 }
 
-export function calculateSavings(initialAmount: number, finalAmount: number): number {
-  if (initialAmount <= 0) return 0
-  const savings = initialAmount - finalAmount
-  return Math.max(0, savings)
-}
-
-export function calculateSavingsPercentage(initialAmount: number, finalAmount: number): number {
-  if (initialAmount <= 0) return 0
-  const savings = initialAmount - finalAmount
-  return (savings / initialAmount) * 100
-}
-
-export function generateStarRating(score: number): {
-  stars: number,
-  description: string
-} {
-  // Ensure score is between 0 and 100
-  const normalizedScore = Math.min(100, Math.max(0, score))
-  
-  // Convert to 0-5 star rating
-  const stars = Math.round(normalizedScore / 20)
-  
-  // Generate description based on star rating
-  let description = ""
-  switch (stars) {
-    case 0:
-      description = "Poor"
-      break
-    case 1:
-      description = "Below expectations"
-      break
-    case 2:
-      description = "Fair"
-      break
-    case 3:
-      description = "Good"
-      break
-    case 4:
-      description = "Very good"
-      break
-    case 5:
-      description = "Excellent"
-      break
-    default:
-      description = "Not rated"
-  }
-  
-  return { stars, description }
+export function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }

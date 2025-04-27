@@ -1,106 +1,131 @@
-"use client";
+"use client"
 
-import { QueryClient } from "@tanstack/react-query";
+import { 
+  QueryClient, 
+  QueryClientProvider as TanStackQueryClientProvider 
+} from "@tanstack/react-query"
+import React from "react"
+
+export type ApiRequestOptions = RequestInit & {
+  params?: Record<string, string | number | boolean | undefined>
+}
+
+type ApiRequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+
+export interface QueryFnOptions {
+  on401?: "throwError" | "redirect" | "returnNull"
+  redirectTo?: string
+}
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000, // 1 minute
       refetchOnWindowFocus: false,
+      staleTime: 1000 * 60 * 5, // 5 minutes
       retry: 1,
     },
   },
-});
+})
 
-interface ApiRequestOptions {
-  headers?: Record<string, string>;
-  body?: any;
+export const QueryClientProvider = ({ 
+  children 
+}: { 
+  children: React.ReactNode 
+}) => {
+  return (
+    <TanStackQueryClientProvider client={queryClient}>
+      {children}
+    </TanStackQueryClientProvider>
+  )
+}
+
+export class ApiError extends Error {
+  statusCode: number
+  constructor(message: string, statusCode: number) {
+    super(message)
+    this.statusCode = statusCode
+    this.name = "ApiError"
+  }
+}
+
+function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>) {
+  const url = new URL(path, window.location.origin)
+  
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        url.searchParams.append(key, String(value))
+      }
+    })
+  }
+  
+  return url.toString()
 }
 
 export async function apiRequest(
-  method: string,
-  url: string,
+  method: ApiRequestMethod,
+  path: string,
   data?: any,
   options: ApiRequestOptions = {}
 ) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...options.headers,
-  };
-
-  const config: RequestInit = {
+  const { params, ...init } = options
+  const url = buildUrl(path, params)
+  
+  const headers = new Headers(init.headers)
+  
+  if (data && !(data instanceof FormData)) {
+    headers.set("Content-Type", "application/json")
+  }
+  
+  const response = await fetch(url, {
     method,
+    body: data instanceof FormData ? data : JSON.stringify(data),
+    credentials: "same-origin",
+    ...init,
     headers,
-    credentials: "include",
-  };
-
-  if (data !== undefined) {
-    config.body = JSON.stringify(data);
-  }
-
-  const response = await fetch(url, config);
-
+  })
+  
   if (!response.ok) {
-    if (response.status === 401) {
-      // Handle unauthorized/unauthenticated requests
-      queryClient.setQueryData(["/api/user"], null);
-    }
-
-    // Attempt to parse error response
-    let errorData;
+    let errorMessage = `API Error: ${response.status} ${response.statusText}`
+    
     try {
-      errorData = await response.json();
-    } catch (e) {
-      errorData = { error: response.statusText };
-    }
-
-    throw new Error(
-      errorData.error || errorData.message || "An error occurred"
-    );
-  }
-
-  // Handle empty responses (like 204 No Content)
-  if (response.status === 204) {
-    return response;
-  }
-
-  // Otherwise parse JSON
-  return response;
-}
-
-interface QueryFnOptions {
-  on401?: "throw" | "returnNull";
-}
-
-export function getQueryFn({ on401 = "throw" }: QueryFnOptions = {}) {
-  return async ({ queryKey }: { queryKey: string[] }) => {
-    const [url] = queryKey;
-    try {
-      const response = await fetch(url, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 && on401 === "returnNull") {
-          return null;
-        }
-
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch (e) {
-          errorData = { error: response.statusText };
-        }
-
-        throw new Error(
-          errorData.error || errorData.message || "An error occurred"
-        );
+      const errorData = await response.json()
+      if (errorData.message) {
+        errorMessage = errorData.message
       }
-
-      return await response.json();
-    } catch (error) {
-      console.error(`Error fetching ${url}:`, error);
-      throw error;
+    } catch (e) {
+      // If we can't parse the error as JSON, we'll use the default error message
     }
-  };
+    
+    throw new ApiError(errorMessage, response.status)
+  }
+  
+  return response
+}
+
+export function getQueryFn<T>({ on401 = "throwError", redirectTo = "/auth" }: QueryFnOptions = {}) {
+  return async ({ queryKey }: { queryKey: string[] }): Promise<T | undefined> => {
+    const path = queryKey[0]
+    
+    try {
+      const response = await apiRequest("GET", path)
+      
+      if (response.status === 204) {
+        return undefined
+      }
+      
+      return await response.json()
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        if (on401 === "redirect") {
+          window.location.href = redirectTo
+          return undefined
+        } else if (on401 === "returnNull") {
+          return undefined
+        }
+      }
+      
+      throw error
+    }
+  }
 }
