@@ -1,11 +1,12 @@
 'use client'
 
-import * as React from 'react'
-import { ReactNode } from 'react'
-import { QueryClientProvider } from '@/lib/query-client'
+import React, { ReactNode } from 'react'
+
+// Import providers
+import { QueryProvider } from '@/lib/query-client'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/hooks/use-auth'
-import { Toaster } from '@/components/ui/toaster'
+import { ToastProvider } from '@/hooks/use-toast'
 
 interface ProvidersProps {
   children: ReactNode
@@ -13,13 +14,14 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <QueryClientProvider>
+    <QueryProvider>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <AuthProvider>
-          {children}
-          <Toaster />
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
-    </QueryClientProvider>
+    </QueryProvider>
   )
 }

@@ -1,160 +1,136 @@
-import { ClassValue, clsx } from 'clsx'
+import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 /**
- * Combine multiple class names with tailwind-merge
+ * Combine multiple class names with Tailwind CSS support
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date to a readable string
+ * Format a date with options
  */
-export function formatDate(date: Date | string): string {
-  if (!date) return ''
-  
-  const dateObj = typeof date === 'string' ? new Date(date) : date
-  return dateObj.toLocaleDateString('en-US', {
+export function formatDate(
+  date: Date | string | number,
+  options: Intl.DateTimeFormatOptions = {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  })
+  }
+): string {
+  return new Intl.DateTimeFormat('en-US', {
+    ...options,
+  }).format(new Date(date))
 }
 
 /**
- * Format a datetime to a readable string
+ * Format currency with options
  */
-export function formatDateTime(date: Date | string): string {
-  if (!date) return ''
-  
-  const dateObj = typeof date === 'string' ? new Date(date) : date
-  return dateObj.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-  })
-}
-
-/**
- * Format a currency value
- */
-export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(
+  amount: number,
+  options: Intl.NumberFormatOptions = {
     style: 'currency',
-    currency,
+    currency: 'USD',
+  }
+): string {
+  return new Intl.NumberFormat('en-US', {
+    ...options,
   }).format(amount)
 }
 
 /**
- * Format a percentage value
+ * Format percentage with options
  */
-export function formatPercentage(value: number, digits = 2): string {
-  return `${value.toFixed(digits)}%`
+export function formatPercent(
+  value: number,
+  options: Intl.NumberFormatOptions = {
+    style: 'percent',
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }
+): string {
+  return new Intl.NumberFormat('en-US', {
+    ...options,
+  }).format(value)
 }
 
 /**
- * Truncate text to a specific length
+ * Truncate a string to a maximum length with ellipsis
  */
-export function truncateText(text: string, maxLength: number): string {
-  if (!text || text.length <= maxLength) return text || ''
-  return `${text.slice(0, maxLength)}...`
-}
-
-/**
- * Generate a random ID
- */
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 15)
-}
-
-/**
- * Deep merge two objects
- */
-export function deepMerge<T>(target: T, source: Partial<T>): T {
-  const output = { ...target }
-  
-  if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach(key => {
-      if (isObject(source[key as keyof Partial<T>])) {
-        if (!(key in target)) {
-          Object.assign(output, { [key]: source[key as keyof Partial<T>] })
-        } else {
-          output[key as keyof T] = deepMerge(
-            target[key as keyof T],
-            source[key as keyof Partial<T>] as any
-          )
-        }
-      } else {
-        Object.assign(output, { [key]: source[key as keyof Partial<T>] })
-      }
-    })
+export function truncate(str: string, length: number): string {
+  if (str.length <= length) {
+    return str
   }
   
-  return output
+  return str.slice(0, length) + '...'
 }
 
 /**
- * Check if value is an object
+ * Deep merge objects
  */
-function isObject(item: any): boolean {
-  return item && typeof item === 'object' && !Array.isArray(item)
-}
+export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  const merged = { ...target } as any
 
-/**
- * Group data by key
- */
-export function groupBy<T>(data: T[], key: keyof T): Record<string, T[]> {
-  return data.reduce((acc, item) => {
-    const groupKey = String(item[key])
-    if (!acc[groupKey]) {
-      acc[groupKey] = []
-    }
-    acc[groupKey].push(item)
-    return acc
-  }, {} as Record<string, T[]>)
-}
+  for (const key in source) {
+    const sourceValue = source[key]
+    const targetValue = target[key]
 
-/**
- * Calculate savings percentage
- */
-export function calculateSavingsPercentage(original: number, final: number): number {
-  if (original === 0) return 0
-  return ((original - final) / original) * 100
-}
-
-/**
- * Sleep for a given time
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-/**
- * Retry a function with exponential backoff
- */
-export async function retry<T>(
-  fn: () => Promise<T>,
-  maxRetries = 3,
-  delay = 1000
-): Promise<T> {
-  let retries = 0
-  let lastError: any
-  
-  while (retries <= maxRetries) {
-    try {
-      return await fn()
-    } catch (error) {
-      lastError = error
-      retries++
-      
-      if (retries > maxRetries) break
-      
-      await sleep(delay * Math.pow(2, retries - 1))
+    if (
+      sourceValue &&
+      typeof sourceValue === 'object' &&
+      targetValue &&
+      typeof targetValue === 'object' &&
+      !Array.isArray(sourceValue) &&
+      !Array.isArray(targetValue)
+    ) {
+      merged[key] = deepMerge(targetValue, sourceValue)
+    } else if (sourceValue !== undefined) {
+      merged[key] = sourceValue
     }
   }
+
+  return merged
+}
+
+/**
+ * Capitalize the first letter of a string
+ */
+export function capitalize(str: string): string {
+  if (!str || typeof str !== 'string') return ''
+  return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
+/**
+ * Create a debounced function
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
   
-  throw lastError
+  return function(...args: Parameters<T>) {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+    
+    timeout = setTimeout(() => {
+      func(...args)
+    }, wait)
+  }
+}
+
+/**
+ * Generate a random string of specified length
+ */
+export function generateRandomString(length: number = 8): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  
+  return result
 }
