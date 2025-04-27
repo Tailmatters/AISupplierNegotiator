@@ -1,79 +1,79 @@
 "use client"
 
-import { QueryClient } from "@tanstack/react-query"
+import { 
+  QueryClient, 
+  QueryClientConfig,
+  QueryFunction 
+} from "@tanstack/react-query"
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes
-      retry: 1,
-    },
-  },
-})
+// API request options
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+type ApiRequestOptions = {
+  headers?: Record<string, string>
+  on401?: "throw" | "returnNull"
+}
 
-type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
-
-// Custom API request function for mutations
+// Default API request function
 export async function apiRequest(
   method: Method,
   url: string,
-  data?: any,
-  options?: RequestInit
+  body?: any,
+  options: ApiRequestOptions = {}
 ): Promise<Response> {
-  const config: RequestInit = {
-    method,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    ...options,
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
   }
 
-  if (data && method !== "GET") {
-    config.body = JSON.stringify(data)
+  const config: RequestInit = {
+    method,
+    headers,
+    credentials: "include",
+  }
+
+  if (body && method !== "GET") {
+    config.body = JSON.stringify(body)
   }
 
   const response = await fetch(url, config)
 
+  if (!response.ok && response.status === 401 && options.on401 === "returnNull") {
+    return null as any
+  }
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({
-      message: response.statusText,
-    }))
-    throw new Error(error.message || "Something went wrong")
+    const errorData = await response.json().catch(() => ({}))
+    const errorMessage = errorData.error || errorData.message || response.statusText
+    throw new Error(errorMessage)
   }
 
   return response
 }
 
-// Custom query function for useQuery that handles 401s and redirects
-export const getQueryFn = <T>(options?: { on401?: "redirect" | "returnNull" }) => {
-  return async ({ queryKey }: { queryKey: string[] }): Promise<T> => {
-    const [url] = queryKey
-    const response = await fetch(url, {
-      credentials: "include",
-    })
-
-    if (response.status === 401) {
-      if (options?.on401 === "redirect") {
-        window.location.href = "/auth"
-        // This will never be reached because of the redirect
-        return new Promise(() => {})
-      }
-      if (options?.on401 === "returnNull") {
-        return null as T
-      }
-      throw new Error("Unauthorized")
+// Function to get a query function with appropriate error handling
+export function getQueryFn<TData = unknown>(
+  options: ApiRequestOptions = {}
+): QueryFunction<TData> {
+  return async ({ queryKey }) => {
+    const [url] = queryKey as [string]
+    const response = await apiRequest("GET", url, undefined, options)
+    
+    // Return null for 401 if specified
+    if (response === null && options.on401 === "returnNull") {
+      return null as any
     }
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        message: response.statusText,
-      }))
-      throw new Error(error.message || "Something went wrong")
-    }
-
-    const data = await response.json()
-    return data
+    
+    return await response.json()
   }
 }
+
+// Create a QueryClient with default configuration
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: false,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+  } as QueryClientConfig["defaultOptions"],
+})
