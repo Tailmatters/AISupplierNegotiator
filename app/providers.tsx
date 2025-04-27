@@ -1,17 +1,18 @@
 'use client'
 
 import React from 'react'
-import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from '@/hooks/use-auth'
-import { Toaster } from '@/components/ui/toaster'
+import { ThemeProvider } from './components/theme-provider'
+import { AuthProvider } from './hooks/use-auth'
+import { Toaster } from './components/ui/toaster'
 
-// Create a client
+// Create a client for React Query
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 60 * 1000, // 1 minute
+      retry: 1,
       refetchOnWindowFocus: false,
-      staleTime: 60 * 1000,
     },
   },
 })

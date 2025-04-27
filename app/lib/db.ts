@@ -3,26 +3,34 @@ import { drizzle } from 'drizzle-orm/neon-serverless'
 import ws from 'ws'
 import * as schema from '@/schema'
 
+// Required for Neon database connection with WebSockets
 neonConfig.webSocketConstructor = ws
 
-// Cache the connection
-let pool: Pool
-let db: ReturnType<typeof drizzle<typeof schema>>
-
 if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is not set')
+  throw new Error("DATABASE_URL environment variable is not set")
 }
 
-function getPool() {
-  if (!pool) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL })
-  }
-  return pool
+// Create a connection pool
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  max: 20,
+})
+
+// Create a database instance with the schema
+export const db = drizzle(pool, { schema })
+
+// Export a function to close the connection pool
+export async function closePool() {
+  await pool.end()
 }
 
-export function getDb() {
-  if (!db) {
-    db = drizzle(getPool(), { schema })
-  }
-  return db
-}
+// Handle database errors
+pool.on('error', (err) => {
+  console.error('Unexpected database error:', err)
+  // Don't crash on connection error, but log it
+})
+
+// Export the pool for use in other files (like for transactions)
+export { pool }

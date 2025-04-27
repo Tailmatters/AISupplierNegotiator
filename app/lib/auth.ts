@@ -1,52 +1,48 @@
-import { getDb } from '@/lib/db'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
-import * as schema from '@/schema'
 import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
 import { promisify } from 'util'
-import type { User } from '@/schema'
+import { users, type User, type InsertUser } from '@/schema'
 import { SignJWT, jwtVerify } from 'jose'
-
-// When generating the secret key, use a secure random generator like this:
-// require('crypto').randomBytes(32).toString('hex')
-// This should be stored in your environment variables
-const JWT_SECRET = process.env.SESSION_SECRET || 'default_secret_replace_in_production'
-const COOKIE_NAME = 'auth_token'
-const MAX_AGE = 60 * 60 * 24 * 30 // 30 days
 
 const scryptAsync = promisify(scrypt)
 
+// Secret key for JWT signing - should be in env var
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.SESSION_SECRET || 'your-secret-key-change-me-for-production'
+)
+
+// Token expiration time (1 day)
+const TOKEN_EXPIRATION_TIME = 60 * 60 * 24
+
 /**
- * Hashes a password using scrypt
- * @param password The password to hash
- * @returns A string in the format 'hash.salt'
+ * Hash a password with salt
  */
-async function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex')
   const buf = (await scryptAsync(password, salt, 64)) as Buffer
   return `${buf.toString('hex')}.${salt}`
 }
 
 /**
- * Compares a supplied password with a stored hash
- * @param suppliedPassword The password to check
- * @param storedPassword The stored password hash
- * @returns True if the passwords match
+ * Compare a password against a stored hash
  */
-async function comparePasswords(suppliedPassword: string, storedPassword: string): Promise<boolean> {
-  const [hashedPassword, salt] = storedPassword.split('.')
-  const hashedPasswordBuf = Buffer.from(hashedPassword, 'hex')
-  const suppliedPasswordBuf = (await scryptAsync(suppliedPassword, salt, 64)) as Buffer
-  return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf)
+export async function comparePasswords(
+  supplied: string,
+  stored: string
+): Promise<boolean> {
+  const [hashed, salt] = stored.split('.')
+  const hashedBuf = Buffer.from(hashed, 'hex')
+  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer
+  return timingSafeEqual(hashedBuf, suppliedBuf)
 }
 
 /**
- * Creates a JWT token for a user
- * @param user The user to create a token for
- * @returns A JWT token
+ * Generate a JWT token for a user
  */
-async function createToken(user: Pick<User, 'id' | 'username' | 'role'>): Promise<string> {
+export async function generateToken(user: User): Promise<string> {
   const token = await new SignJWT({ 
     id: user.id, 
     username: user.username,
@@ -54,59 +50,54 @@ async function createToken(user: Pick<User, 'id' | 'username' | 'role'>): Promis
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('30d')
-    .sign(new TextEncoder().encode(JWT_SECRET))
-  
+    .setExpirationTime(`${TOKEN_EXPIRATION_TIME}s`)
+    .sign(JWT_SECRET)
+
   return token
 }
 
 /**
- * Verifies a JWT token
- * @param token The token to verify
- * @returns The decoded token payload if valid, null otherwise
+ * Verify a JWT token
  */
-async function verifyToken(token: string): Promise<{ id: number, username: string, role: string } | null> {
+export async function verifyToken(token: string) {
   try {
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(JWT_SECRET)
-    )
-    
-    return {
-      id: payload.id as number,
-      username: payload.username as string,
-      role: payload.role as string
-    }
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    return payload
   } catch (error) {
+    console.error('Token verification failed:', error)
     return null
   }
 }
 
 /**
- * Gets the current authenticated user
- * @returns The user if authenticated, null otherwise
+ * Get the current user from the session cookie
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const token = cookies().get(COOKIE_NAME)?.value
+    const cookieStore = cookies()
+    const token = cookieStore.get('token')?.value
     
     if (!token) {
       return null
     }
     
-    const decoded = await verifyToken(token)
-    
-    if (!decoded) {
+    const payload = await verifyToken(token)
+    if (!payload || typeof payload.id !== 'number') {
       return null
     }
     
-    const db = getDb()
     const [user] = await db
       .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, decoded.id))
+      .from(users)
+      .where(eq(users.id, payload.id))
     
-    return user || null
+    if (!user) {
+      return null
+    }
+    
+    // Exclude password from the returned user
+    const { password, ...userWithoutPassword } = user
+    return userWithoutPassword as User
   } catch (error) {
     console.error('Error getting current user:', error)
     return null
@@ -114,11 +105,9 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 /**
- * Handles user login
- * @param req The request object
- * @returns A response with the user data and a cookie if successful
+ * Handle login requests
  */
-export async function handleLogin(req: NextRequest): Promise<NextResponse> {
+export async function handleLogin(req: NextRequest) {
   try {
     const body = await req.json()
     const { username, password } = body
@@ -130,11 +119,10 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
       )
     }
     
-    const db = getDb()
     const [user] = await db
       .select()
-      .from(schema.users)
-      .where(eq(schema.users.username, username))
+      .from(users)
+      .where(eq(users.username, username))
     
     if (!user || !(await comparePasswords(password, user.password))) {
       return NextResponse.json(
@@ -143,123 +131,130 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
       )
     }
     
-    const token = await createToken(user)
-    const response = NextResponse.json({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-    })
+    const token = await generateToken(user)
     
-    // Set cookie
+    const response = NextResponse.json(
+      {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+      },
+      { status: 200 }
+    )
+    
+    // Set the cookie
     response.cookies.set({
-      name: COOKIE_NAME,
+      name: 'token',
       value: token,
       httpOnly: true,
-      path: '/',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: MAX_AGE,
+      sameSite: 'lax',
+      maxAge: TOKEN_EXPIRATION_TIME,
+      path: '/',
     })
     
     return response
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(
-      { error: 'An error occurred during login' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
 
 /**
- * Handles user registration
- * @param req The request object
- * @returns A response with the user data and a cookie if successful
+ * Handle register requests
  */
-export async function handleRegister(req: NextRequest): Promise<NextResponse> {
+export async function handleRegister(req: NextRequest) {
   try {
     const body = await req.json()
-    const { username, password, email, name, role } = body
     
-    if (!username || !password || !email || !name) {
+    // Validate required fields
+    if (!body.username || !body.password || !body.email || !body.name) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
     
-    const db = getDb()
-    
     // Check if username already exists
-    const [existingUser] = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.username, username))
+    const existingUser = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, body.username))
     
-    if (existingUser) {
+    if (existingUser.length > 0) {
       return NextResponse.json(
         { error: 'Username already exists' },
-        { status: 400 }
+        { status: 409 }
       )
     }
     
-    const hashedPassword = await hashPassword(password)
+    // Hash the password
+    const hashedPassword = await hashPassword(body.password)
     
-    // Insert new user
-    const [user] = await db
-      .insert(schema.users)
-      .values({
-        username,
-        password: hashedPassword,
-        email,
-        name,
-        role: role || 'buyer',
+    // Create the user
+    const userData: InsertUser = {
+      username: body.username,
+      password: hashedPassword,
+      email: body.email,
+      name: body.name,
+      role: body.role || 'buyer',
+      company: body.company,
+      jobTitle: body.jobTitle,
+      phone: body.phone,
+    }
+    
+    const [newUser] = await db
+      .insert(users)
+      .values(userData)
+      .returning({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        name: users.name,
+        role: users.role,
       })
-      .returning()
     
-    const token = await createToken(user)
-    const response = NextResponse.json({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-    })
+    const token = await generateToken(newUser as User)
     
-    // Set cookie
+    const response = NextResponse.json(newUser, { status: 201 })
+    
+    // Set the cookie
     response.cookies.set({
-      name: COOKIE_NAME,
+      name: 'token',
       value: token,
       httpOnly: true,
-      path: '/',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: MAX_AGE,
+      sameSite: 'lax',
+      maxAge: TOKEN_EXPIRATION_TIME,
+      path: '/',
     })
     
     return response
   } catch (error) {
     console.error('Registration error:', error)
     return NextResponse.json(
-      { error: 'An error occurred during registration' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
 
 /**
- * Handles user logout
- * @returns A response with a cleared cookie
+ * Handle logout requests
  */
-export async function handleLogout(): Promise<NextResponse> {
+export async function handleLogout() {
   const response = NextResponse.json({ success: true })
   
-  // Clear the cookie
   response.cookies.set({
-    name: COOKIE_NAME,
+    name: 'token',
     value: '',
     httpOnly: true,
+    expires: new Date(0),
     path: '/',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 0,
   })
   
   return response

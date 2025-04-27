@@ -6,43 +6,72 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
+
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
+
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
+
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
+
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
+
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
+
+    --success: 142.1 76.2% 36.3%;
+    --success-foreground: 355.7 100% 97.3%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 96% 89%;
+
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
+
     --radius: 0.5rem;
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
+
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
+
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
+
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
+
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
+
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
+
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 144.9 80.4% 10%;
+
+    --warning: 48 96% 89%;
+    --warning-foreground: 38 92% 50%;
+
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
@@ -55,253 +84,195 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-/* Custom scrollbar styles */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-muted;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/50 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/70;
-}
-
-/* Custom transitions and animations */
-.fade-in {
-  opacity: 0;
-  animation: fadeIn 0.5s ease-in-out forwards;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
+@layer components {
+  /* Custom component styles */
+  .container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
-  to {
-    opacity: 1;
+
+  /* Dashboard layout components */
+  .dashboard-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4;
   }
-}
 
-.scale-in {
-  transform: scale(0.95);
-  opacity: 0;
-  animation: scaleIn 0.3s ease-out forwards;
-}
-
-@keyframes scaleIn {
-  from {
-    transform: scale(0.95);
-    opacity: 0;
+  .dashboard-panel {
+    @apply bg-card rounded-lg border shadow-sm p-4;
   }
-  to {
-    transform: scale(1);
-    opacity: 1;
+
+  .dashboard-header {
+    @apply flex items-center justify-between mb-4;
   }
-}
 
-/* Utility classes for procurement app */
-.grid-dashboard {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-}
-
-@media (min-width: 768px) {
-  .grid-dashboard {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
+  .dashboard-title {
+    @apply text-lg font-semibold tracking-tight;
   }
-}
 
-.stats-card {
-  @apply rounded-lg border bg-card p-4 shadow-sm transition-all hover:shadow-md;
-}
+  /* Data visualization components */
+  .chart-container {
+    @apply h-64 w-full;
+  }
 
-.category-badge {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
-}
+  .stat-card {
+    @apply bg-card rounded-lg border shadow-sm p-4 flex flex-col;
+  }
 
-.category-badge-primary {
-  @apply bg-primary/10 text-primary;
-}
+  .stat-title {
+    @apply text-sm font-medium text-muted-foreground;
+  }
 
-.category-badge-success {
-  @apply bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-300;
-}
+  .stat-value {
+    @apply text-2xl font-bold mt-1;
+  }
 
-.category-badge-warning {
-  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-800/30 dark:text-yellow-300;
-}
+  .stat-description {
+    @apply text-sm text-muted-foreground mt-1;
+  }
 
-.category-badge-danger {
-  @apply bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-300;
-}
+  /* Negotiation components */
+  .chat-container {
+    @apply flex flex-col h-full;
+  }
 
-.category-badge-info {
-  @apply bg-blue-100 text-blue-800 dark:bg-blue-800/30 dark:text-blue-300;
-}
+  .chat-messages {
+    @apply flex-1 overflow-y-auto p-4 space-y-4;
+  }
 
-/* Data visualizations */
-.chart-container {
-  @apply w-full h-full min-h-[200px] p-4;
-}
+  .message-bubble {
+    @apply max-w-[80%] rounded-lg p-3;
+  }
 
-/* Category tree styles */
-.category-tree {
-  @apply space-y-1;
-}
+  .message-user {
+    @apply bg-primary text-primary-foreground self-end;
+  }
 
-.category-tree-item {
-  @apply pl-3 border-l hover:border-l-2 transition-all;
-}
+  .message-ai {
+    @apply bg-secondary text-secondary-foreground;
+  }
 
-.category-tree-level-1 {
-  @apply border-primary hover:border-primary;
-}
+  .message-supplier {
+    @apply bg-accent text-accent-foreground;
+  }
 
-.category-tree-level-2 {
-  @apply ml-4 border-blue-400 hover:border-blue-400;
-}
+  .chat-input-container {
+    @apply p-4 border-t;
+  }
 
-.category-tree-level-3 {
-  @apply ml-8 border-blue-300 hover:border-blue-300;
-}
+  /* Form styles */
+  .form-container {
+    @apply space-y-6;
+  }
 
-/* AI negotiation chat styles */
-.chat-container {
-  @apply flex flex-col h-full;
-}
+  .form-section {
+    @apply space-y-4;
+  }
 
-.chat-messages {
-  @apply flex-grow overflow-y-auto p-4 space-y-4;
-}
+  .form-section-title {
+    @apply text-lg font-medium;
+  }
 
-.chat-message {
-  @apply max-w-[80%] rounded-lg px-4 py-2;
-}
+  .form-actions {
+    @apply flex justify-end space-x-2 mt-6;
+  }
 
-.chat-message-user {
-  @apply ml-auto bg-primary text-primary-foreground;
-}
+  /* Table styles */
+  .data-table-container {
+    @apply rounded-md border;
+  }
 
-.chat-message-ai {
-  @apply bg-muted;
-}
+  .data-table {
+    @apply w-full text-sm;
+  }
 
-.chat-message-supplier {
-  @apply bg-accent text-accent-foreground;
-}
+  .table-header {
+    @apply bg-muted/50;
+  }
 
-.chat-input {
-  @apply p-4 border-t;
-}
+  .table-header-cell {
+    @apply h-10 px-4 text-left align-middle font-medium text-muted-foreground;
+  }
 
-/* Contract styles */
-.contract-document {
-  @apply bg-white text-black p-8 shadow-md rounded-lg max-w-4xl mx-auto;
-  font-family: 'Times New Roman', Times, serif;
-}
+  .table-row {
+    @apply border-b hover:bg-muted/50 transition-colors;
+  }
 
-.contract-header {
-  @apply text-center mb-8;
-}
+  .table-cell {
+    @apply p-4 align-middle;
+  }
 
-.contract-title {
-  @apply text-xl font-bold uppercase mb-4;
-}
+  /* Supplier and contract components */
+  .supplier-card {
+    @apply bg-card rounded-lg border shadow-sm overflow-hidden;
+  }
 
-.contract-parties {
-  @apply mb-6;
-}
+  .supplier-header {
+    @apply p-4 border-b;
+  }
 
-.contract-section {
-  @apply mb-6;
-}
+  .supplier-content {
+    @apply p-4;
+  }
 
-.contract-section-title {
-  @apply font-bold mb-2;
-}
+  .supplier-footer {
+    @apply p-4 bg-muted/50 flex justify-between;
+  }
 
-.contract-signature {
-  @apply mt-12 flex flex-col sm:flex-row justify-between;
-}
+  .contract-card {
+    @apply bg-card rounded-lg border shadow-sm overflow-hidden;
+  }
 
-.signature-block {
-  @apply border-t border-gray-400 pt-4 w-full sm:w-[45%];
-}
+  .contract-header {
+    @apply p-4 border-b;
+  }
 
-/* Supplier dashboard styles */
-.supplier-card {
-  @apply rounded-lg border bg-card overflow-hidden transition-shadow hover:shadow-md;
-}
+  .contract-content {
+    @apply p-4;
+  }
 
-.supplier-card-header {
-  @apply bg-muted p-4 border-b;
-}
+  .contract-footer {
+    @apply p-4 bg-muted/50 flex justify-between;
+  }
 
-.supplier-card-content {
-  @apply p-4;
-}
+  /* Status indicators */
+  .status-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
 
-.supplier-metrics {
-  @apply grid grid-cols-2 gap-4 mt-4;
-}
+  .status-draft {
+    @apply bg-muted text-muted-foreground;
+  }
 
-.supplier-metric {
-  @apply text-center p-2 rounded-md bg-secondary;
-}
+  .status-active {
+    @apply bg-primary/20 text-primary;
+  }
 
-/* Star rating component */
-.star-rating {
-  @apply flex items-center;
-}
+  .status-completed {
+    @apply bg-success/20 text-success;
+  }
 
-.star {
-  @apply text-gray-300 transition-colors;
-}
+  .status-cancelled {
+    @apply bg-destructive/20 text-destructive;
+  }
 
-.star-filled {
-  @apply text-yellow-500;
-}
+  /* Animations */
+  .animate-fade-in {
+    @apply animate-[fade-in_0.3s_ease-in-out];
+  }
 
-/* Portal's Five Forces visualization */
-.forces-container {
-  @apply relative p-8;
-}
+  .animate-slide-in {
+    @apply animate-[slide-in_0.3s_ease-in-out];
+  }
 
-.forces-center {
-  @apply absolute inset-0 flex items-center justify-center;
-}
+  @keyframes fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
 
-.forces-item {
-  @apply absolute p-4 rounded-lg border bg-card shadow-sm transition-transform hover:scale-105;
-}
-
-.force-top {
-  @apply top-0 left-1/2 transform -translate-x-1/2;
-}
-
-.force-right {
-  @apply right-0 top-1/2 transform -translate-y-1/2;
-}
-
-.force-bottom {
-  @apply bottom-0 left-1/2 transform -translate-x-1/2;
-}
-
-.force-left {
-  @apply left-0 top-1/2 transform -translate-y-1/2;
-}
-
-.force-center {
-  @apply left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2;
+  @keyframes slide-in {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
 }
