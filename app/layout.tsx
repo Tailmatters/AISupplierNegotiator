@@ -1,25 +1,17 @@
-import './globals.css'
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import './globals.css'
+import { inter } from '@/lib/fonts'
 import { Providers } from './providers'
-import { Toaster } from '@/components/ui/toaster'
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
 
 export const metadata: Metadata = {
-  title: 'AI Negotiator - Procurement Negotiation Platform',
-  description: 'An AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions through intelligent contract management, advanced analytics, and collaborative tools.',
+  title: 'AI Negotiator - Procurement Management Platform',
+  description: 'AI-powered procurement management platform for negotiating with suppliers',
   keywords: [
     'procurement',
     'ai negotiation',
     'supplier management',
     'contract management',
     'spend analysis',
-    'business intelligence',
-    'procurement analytics',
-    'supplier negotiations',
-    'vendor management',
-    'supply chain optimization',
   ],
   authors: [
     {
@@ -27,8 +19,9 @@ export const metadata: Metadata = {
     },
   ],
   creator: 'AI Negotiator',
-  viewport: 'width=device-width, initial-scale=1',
-  robots: 'index, follow',
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  ),
 }
 
 export default function RootLayout({
@@ -38,11 +31,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} min-h-screen font-sans antialiased`}>
-        <Providers>
-          {children}
-          <Toaster />
-        </Providers>
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { handleLogin } from '@/lib/auth'
 
-export async function POST(req: NextRequest) {
-  return handleLogin(req)
+export async function POST(request: NextRequest) {
+  return handleLogin(request)
 }
