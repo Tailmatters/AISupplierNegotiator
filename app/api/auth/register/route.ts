@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { handleRegister } from '@/lib/auth'
 
-export async function POST(request: NextRequest) {
-  return handleRegister(request)
+export async function POST(req: NextRequest) {
+  return handleRegister(req)
 }

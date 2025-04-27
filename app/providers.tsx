@@ -1,17 +1,17 @@
-"use client"
+'use client'
 
-import React from "react"
-import { ThemeProvider } from "@/components/theme-provider"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { AuthProvider } from "@/hooks/use-auth"
-import { Toaster } from "@/components/ui/toaster"
+import React from 'react'
+import { ThemeProvider } from 'next-themes'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AuthProvider } from '@/hooks/use-auth'
+import { Toaster } from '@/components/ui/toaster'
 
 // Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 60 * 1000,
     },
   },
 })
@@ -23,6 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         attribute="class"
         defaultTheme="system"
         enableSystem
+        disableTransitionOnChange
       >
         <AuthProvider>
           {children}

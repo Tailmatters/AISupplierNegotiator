@@ -1,33 +1,42 @@
-import type { Metadata } from "next"
-import { Inter as FontSans } from "next/font/google"
-import "./globals.css"
-import { cn } from "@/lib/utils"
-import { Providers } from "./providers"
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Providers } from './providers'
 
-const fontSans = FontSans({
-  subsets: ["latin"],
-  variable: "--font-sans",
-})
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "AI Procurement Negotiator",
-  description: "AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions",
+  title: 'AI Negotiator | Procurement Negotiations Platform',
+  description: 'AI-powered procurement negotiation platform that optimizes supplier interactions through intelligent contract management, analytics, and collaboration tools.',
+  keywords: 'procurement, ai, negotiation, supplier management, spend analysis, contract management',
+  creator: 'AI Negotiator Team',
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://ai-negotiator.example.com',
+    title: 'AI Negotiator | Procurement Negotiations Platform',
+    description: 'AI-powered procurement negotiation platform that optimizes supplier interactions through intelligent contract management, analytics, and collaboration tools.',
+    siteName: 'AI Negotiator',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'AI Negotiator | Procurement Negotiations Platform',
+    description: 'AI-powered procurement negotiation platform that optimizes supplier interactions through intelligent contract management, analytics, and collaboration tools.',
+    creator: '@ai_negotiator',
+  },
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={cn(
-          "min-h-screen bg-background font-sans antialiased",
-          fontSans.variable
-        )}
-      >
-        <Providers>{children}</Providers>
+      <body className={inter.className}>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   )
