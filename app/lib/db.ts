@@ -1,21 +1,21 @@
-import { sql } from '@vercel/postgres'
-import { drizzle } from 'drizzle-orm/vercel-postgres'
+import { Pool } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/neon-serverless'
 import * as schema from '@/schema'
+import ws from 'ws'
+import { neonConfig } from '@neondatabase/serverless'
 
-// Check that database URL is set
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is not set')
+// Configure Neon serverless driver to use web sockets for Edge functions
+neonConfig.webSocketConstructor = ws
+
+// Get database connection string from environment variables
+const connectionString = process.env.DATABASE_URL
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is not set')
 }
 
-// Create a Drizzle client
-export const db = drizzle(sql, { schema })
+// Create connection pool
+const pool = new Pool({ connectionString })
 
-// Helper functions for database operations
-export async function executeQuery<T>(queryFn: () => Promise<T>): Promise<T> {
-  try {
-    return await queryFn()
-  } catch (error) {
-    console.error('Database error:', error)
-    throw new Error('Database operation failed')
-  }
-}
+// Create drizzle database instance
+export const db = drizzle(pool, { schema })
