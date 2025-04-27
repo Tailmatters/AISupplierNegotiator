@@ -1,21 +1,24 @@
-import { Pool } from '@neondatabase/serverless'
+'use server'
+
+import { Pool, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-serverless'
 import * as schema from '@/schema'
 import ws from 'ws'
-import { neonConfig } from '@neondatabase/serverless'
 
-// Configure Neon serverless driver to use web sockets for Edge functions
+// Configure Neon for WebSocket
 neonConfig.webSocketConstructor = ws
 
-// Get database connection string from environment variables
-const connectionString = process.env.DATABASE_URL
-
-if (!connectionString) {
-  throw new Error('DATABASE_URL environment variable is not set')
+// Check if DATABASE_URL environment variable is present
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?",
+  )
 }
 
-// Create connection pool
-const pool = new Pool({ connectionString })
+// Create a pool for database connections
+export const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL 
+})
 
-// Create drizzle database instance
+// Initialize Drizzle ORM with the database pool and schema
 export const db = drizzle(pool, { schema })

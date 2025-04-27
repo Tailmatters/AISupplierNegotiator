@@ -1,30 +1,26 @@
+'use server'
+
+import { cookies } from 'next/headers'
+import { SignJWT, jwtVerify } from 'jose'
+import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
+import { promisify } from 'util'
 import { db } from '@/lib/db'
 import { users } from '@/schema'
-import { cookies } from 'next/headers'
-import { jwtVerify, SignJWT } from 'jose'
-import { NextRequest } from 'next/server'
 import { eq } from 'drizzle-orm'
-import { randomBytes, scrypt } from 'crypto'
-import { promisify } from 'util'
 
-// Convert callback-based scrypt to Promise-based
+// Make scrypt async
 const scryptAsync = promisify(scrypt)
 
 // Secret key for JWT signing
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || 'extremely-secure-secret-key-change-me-in-production'
+const secretKey = new TextEncoder().encode(
+  process.env.SESSION_SECRET || 'default_secret_key_for_development'
 )
 
-// JWT options
-const JWT_OPTIONS = {
-  expiresIn: '24h',
-}
-
-// User type excluding password
-export type AuthUser = Omit<typeof users.$inferSelect, 'password'>
+// JWT token expiration time (24 hours)
+const tokenExpiration = '24h'
 
 /**
- * Hash a password with a random salt
+ * Hash a password using scrypt
  */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex')
@@ -33,102 +29,133 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
+ * Compare a password with a hashed one
+ */
+export async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
+  const [hashed, salt] = stored.split('.')
+  const hashedBuf = Buffer.from(hashed, 'hex')
+  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer
+  return timingSafeEqual(hashedBuf, suppliedBuf)
+}
+
+/**
  * Create a JWT token and set it as a cookie
  */
-export async function createToken(user: AuthUser): Promise<void> {
-  // Create the token
-  const token = await new SignJWT({ id: user.id })
+export async function createToken(user: any): Promise<void> {
+  // Create payload with user info (excluding password)
+  const { password, ...payload } = user
+
+  // Sign the JWT token
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(JWT_OPTIONS.expiresIn)
-    .sign(JWT_SECRET)
-  
-  // Set the cookie
+    .setExpirationTime(tokenExpiration)
+    .sign(secretKey)
+
+  // Set the token in a secure HTTP-only cookie
   cookies().set({
-    name: 'auth-token',
+    name: 'auth_token',
     value: token,
     httpOnly: true,
     path: '/',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24, // 24 hours
+    maxAge: 60 * 60 * 24, // 24 hours in seconds
+    sameSite: 'lax',
   })
 }
 
 /**
- * Get the token from cookies
+ * Get user data from the token in the cookies
  */
-export async function getToken(): Promise<string | undefined> {
-  const cookieStore = cookies()
-  const token = cookieStore.get('auth-token')
-  return token?.value
-}
-
-/**
- * Verify the JWT token and return the user ID
- */
-export async function verifyToken(token: string): Promise<number | null> {
+export async function getUserFromToken(): Promise<any | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET)
-    return payload.id as number
-  } catch (error) {
-    console.error('Token verification failed:', error)
-    return null
-  }
-}
+    // Get the token from cookies
+    const token = cookies().get('auth_token')
 
-/**
- * Compare a plain password with a hashed one
- */
-export async function comparePasswords(plain: string, hashed: string): Promise<boolean> {
-  try {
-    const [hash, salt] = hashed.split('.')
-    const hashBuffer = Buffer.from(hash, 'hex')
-    const derivedKey = (await scryptAsync(plain, salt, 64)) as Buffer
-    return Buffer.compare(hashBuffer, derivedKey) === 0
-  } catch (error) {
-    console.error('Password comparison failed:', error)
-    return false
-  }
-}
-
-/**
- * Get the current user from the JWT token in cookies
- */
-export async function getUserFromToken(): Promise<AuthUser | null> {
-  try {
-    const token = await getToken()
-    
-    if (!token) {
+    // If no token exists, return null
+    if (!token || !token.value) {
       return null
     }
+
+    // Verify the token
+    const { payload } = await jwtVerify(token.value, secretKey)
     
-    const userId = await verifyToken(token)
-    
-    if (!userId) {
+    // If the user ID doesn't exist in the payload, return null
+    if (!payload.id) {
       return null
     }
-    
+
+    // Get the user from the database
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.id, userId))
+      .where(eq(users.id, Number(payload.id)))
+      .limit(1)
     
+    // If the user doesn't exist, return null
     if (!user) {
       return null
     }
     
-    // Return user without password
+    // Remove the password from the user object
     const { password, ...userWithoutPassword } = user
+    
     return userWithoutPassword
   } catch (error) {
-    console.error('Get user error:', error)
+    console.error('Error getting user from token:', error)
     return null
   }
 }
 
 /**
- * Log out the current user by removing the auth cookie
+ * Refresh the user's token
+ */
+export async function refreshToken(): Promise<void> {
+  try {
+    const user = await getUserFromToken()
+    if (user) {
+      await createToken(user)
+    }
+  } catch (error) {
+    console.error('Error refreshing token:', error)
+  }
+}
+
+/**
+ * Log the user out by removing the auth cookie
  */
 export async function logout(): Promise<void> {
-  cookies().delete('auth-token')
+  cookies().delete('auth_token')
+}
+
+/**
+ * Middleware function to check if a user is authenticated
+ */
+export async function isAuthenticated(): Promise<boolean> {
+  const user = await getUserFromToken()
+  return !!user
+}
+
+/**
+ * Function to check if user has admin role
+ */
+export async function isAdmin(): Promise<boolean> {
+  const user = await getUserFromToken()
+  return user ? user.role === 'admin' : false
+}
+
+/**
+ * Function to check if user has buyer role
+ */
+export async function isBuyer(): Promise<boolean> {
+  const user = await getUserFromToken()
+  return user ? user.role === 'buyer' : false
+}
+
+/**
+ * Function to check if user has supplier role
+ */
+export async function isSupplier(): Promise<boolean> {
+  const user = await getUserFromToken()
+  return user ? user.role === 'supplier' : false
 }

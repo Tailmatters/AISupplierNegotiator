@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getUserFromToken } from '@/lib/auth'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    // Get the current user from the token
+    // Get the current user from the auth token
     const user = await getUserFromToken()
     
+    // If no user is found (not authenticated)
     if (!user) {
       return NextResponse.json(
         { error: 'Not authenticated' },
@@ -13,11 +14,12 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    return NextResponse.json(user)
+    // Return the user data
+    return NextResponse.json(user, { status: 200 })
   } catch (error) {
-    console.error('Get user error:', error)
+    console.error('Error fetching current user:', error)
     return NextResponse.json(
-      { error: 'Failed to get user' },
+      { error: 'An error occurred while fetching user data' },
       { status: 500 }
     )
   }

@@ -1,62 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { users, insertUserSchema } from '@/schema'
-import { hashPassword, createToken } from '@/lib/auth'
+import { users } from '@/schema'
 import { eq } from 'drizzle-orm'
+import { hashPassword, createToken } from '@/lib/auth'
 import { z } from 'zod'
 
-// Extended schema for registration with password validation
-const registerSchema = insertUserSchema.extend({
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
-  confirmPassword: z.string(),
+// Validation schema for registration
+const registerSchema = z.object({
+  username: z.string().min(3, 'Username must be at least 3 characters'),
+  email: z.string().email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  role: z.enum(['admin', 'buyer', 'supplier']).default('buyer'),
+  company: z.string().optional(),
+  position: z.string().optional(),
+  phone: z.string().optional(),
+  confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
+  message: "Passwords don't match",
   path: ['confirmPassword'],
 })
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // Parse and validate the request body
-    const body = await request.json()
-    const validation = registerSchema.safeParse(body)
+    // Parse request body
+    const body = await req.json()
     
-    if (!validation.success) {
+    // Validate request data
+    const validationResult = registerSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: validation.error.errors[0].message },
+        { error: validationResult.error.format() },
         { status: 400 }
       )
     }
     
-    // Extract data from validation
-    const { username, email, password, name, role } = validation.data
+    // Extract validated data
+    const { confirmPassword, ...userData } = validationResult.data
     
-    // Check if username or email already exists
-    const existingUser = await db
-      .select({ id: users.id })
+    // Check if username already exists
+    const existingUsername = await db
+      .select()
       .from(users)
-      .where(
-        eq(users.username, username)
-      )
+      .where(eq(users.username, userData.username))
       .limit(1)
     
-    if (existingUser.length > 0) {
+    if (existingUsername.length > 0) {
       return NextResponse.json(
         { error: 'Username already exists' },
         { status: 400 }
       )
     }
     
+    // Check if email already exists
     const existingEmail = await db
-      .select({ id: users.id })
+      .select()
       .from(users)
-      .where(
-        eq(users.email, email)
-      )
+      .where(eq(users.email, userData.email))
       .limit(1)
     
     if (existingEmail.length > 0) {
@@ -66,35 +66,33 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Hash the password
-    const hashedPassword = await hashPassword(password)
+    // Hash password
+    const hashedPassword = await hashPassword(userData.password)
     
-    // Insert the new user
+    // Create user in database
     const [newUser] = await db
       .insert(users)
       .values({
-        username,
-        name,
-        email,
+        ...userData,
         password: hashedPassword,
-        role: role || 'buyer', // Default role is buyer
         createdAt: new Date(),
         updatedAt: new Date(),
+        lastLogin: new Date(),
       })
       .returning()
     
-    // Remove password from user object
-    const { password: _, ...safeUser } = newUser
+    // Create token and set cookie
+    await createToken(newUser)
     
-    // Create a token and set it in a cookie
-    await createToken(safeUser)
+    // Remove password from response
+    const { password, ...userWithoutPassword } = newUser
     
-    // Return the user without the password
-    return NextResponse.json(safeUser)
+    // Return success response
+    return NextResponse.json(userWithoutPassword, { status: 201 })
   } catch (error) {
     console.error('Registration error:', error)
     return NextResponse.json(
-      { error: 'Failed to register user' },
+      { error: 'An error occurred during registration' },
       { status: 500 }
     )
   }
