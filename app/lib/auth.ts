@@ -1,27 +1,27 @@
 import { db } from '@/lib/db'
-import { users } from '@/schema'
-import { eq } from 'drizzle-orm'
-import { SignJWT, jwtVerify } from 'jose'
+import { users, type User } from '@/schema'
 import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
+import { SignJWT, jwtVerify } from 'jose'
+import { eq } from 'drizzle-orm'
 import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
 import { promisify } from 'util'
 
-// Convert callback-based scrypt to Promise-based
 const scryptAsync = promisify(scrypt)
 
-// Get JWT secret from environment
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+// JWT settings
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.SESSION_SECRET || 'default-secret-change-in-production'
+)
 const COOKIE_NAME = 'auth_token'
+const EXPIRATION = '30d'
 
-// Hash a password with salt
+// Password hashing
 export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString('hex')
   const buf = (await scryptAsync(password, salt, 64)) as Buffer
   return `${buf.toString('hex')}.${salt}`
 }
 
-// Compare a password with a hashed password
 export async function comparePasswords(supplied: string, stored: string) {
   const [hashed, salt] = stored.split('.')
   const hashedBuf = Buffer.from(hashed, 'hex')
@@ -29,40 +29,48 @@ export async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf)
 }
 
-// Create a JWT token
-export async function createToken(payload: any) {
-  const secret = new TextEncoder().encode(JWT_SECRET)
-  return await new SignJWT(payload)
+// JWT token generation and verification
+export async function createToken(user: Omit<User, 'password'>) {
+  const token = await new SignJWT({ id: user.id, username: user.username })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('1d')
-    .sign(secret)
+    .setExpirationTime(EXPIRATION)
+    .sign(JWT_SECRET)
+
+  cookies().set(COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+  })
+
+  return token
 }
 
-// Verify a JWT token
-export async function verifyToken(token: string) {
-  const secret = new TextEncoder().encode(JWT_SECRET)
+export async function verifyToken() {
+  const token = cookies().get(COOKIE_NAME)?.value
+
+  if (!token) {
+    throw new Error('Authentication token is missing')
+  }
+
   try {
-    const { payload } = await jwtVerify(token, secret)
+    const { payload } = await jwtVerify(token, JWT_SECRET)
     return payload
   } catch (error) {
-    return null
+    throw new Error('Invalid authentication token')
   }
 }
 
-// Get the current user from the cookie
-export async function getUser(request?: NextRequest) {
+export async function getUserFromToken() {
   try {
-    const cookieStore = cookies()
-    const token = request
-      ? request.cookies.get(COOKIE_NAME)?.value
-      : cookieStore.get(COOKIE_NAME)?.value
-
-    if (!token) return null
-
-    const payload = await verifyToken(token)
-    if (!payload || !payload.userId) return null
-
+    const payload = await verifyToken()
+    
+    if (!payload.id) {
+      return null
+    }
+    
     const [user] = await db
       .select({
         id: users.id,
@@ -70,41 +78,23 @@ export async function getUser(request?: NextRequest) {
         name: users.name,
         email: users.email,
         role: users.role,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
       })
       .from(users)
-      .where(eq(users.id, Number(payload.userId)))
-
+      .where(eq(users.id, Number(payload.id)))
+    
     return user || null
   } catch (error) {
-    console.error('Error getting user:', error)
     return null
   }
 }
 
-// Set the auth cookie with a token
-export function setAuthCookie(response: NextResponse, token: string) {
-  response.cookies.set({
-    name: COOKIE_NAME,
-    value: token,
+export async function logout() {
+  cookies().set(COOKIE_NAME, '', {
     httpOnly: true,
+    expires: new Date(0),
+    sameSite: 'lax',
     path: '/',
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 60 * 60 * 24, // 1 day
   })
-  return response
-}
-
-// Clear the auth cookie
-export function clearAuthCookie(response: NextResponse) {
-  response.cookies.set({
-    name: COOKIE_NAME,
-    value: '',
-    httpOnly: true,
-    path: '/',
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 0,
-  })
-  return response
 }

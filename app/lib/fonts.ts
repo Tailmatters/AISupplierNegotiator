@@ -1,13 +1,20 @@
-import { Inter, Lora } from 'next/font/google'
+import { 
+  Inter as FontSans,
+  Montserrat as FontHeading,
+  JetBrains_Mono as FontMono
+} from 'next/font/google'
 
-export const inter = Inter({
+export const fontSans = FontSans({ 
   subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-sans',
 })
 
-export const lora = Lora({
+export const fontHeading = FontHeading({
   subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-lora',
+  variable: '--font-heading',
+})
+
+export const fontMono = FontMono({
+  subsets: ['latin'],
+  variable: '--font-mono',
 })

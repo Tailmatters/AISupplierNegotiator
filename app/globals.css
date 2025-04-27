@@ -28,11 +28,14 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --success: 142.1 76.2% 36.3%;
-    --success-foreground: 355.7 100% 97.3%;
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 210 40% 98%;
 
     --warning: 38 92% 50%;
-    --warning-foreground: 48 96% 89%;
+    --warning-foreground: 210 40% 98%;
+
+    --info: 221.2 83.2% 65.3%;
+    --info-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -67,10 +70,13 @@
     --destructive-foreground: 210 40% 98%;
 
     --success: 142.1 70.6% 45.3%;
-    --success-foreground: 144.9 80.4% 10%;
+    --success-foreground: 210 40% 98%;
 
-    --warning: 48 96% 89%;
-    --warning-foreground: 38 92% 50%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 210 40% 98%;
+
+    --info: 217.2 91.2% 59.8%;
+    --info-foreground: 222.2 47.4% 11.2%;
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
@@ -87,180 +93,34 @@
   }
 }
 
-/* Custom Animations */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.gradient-heading {
+  @apply bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent;
 }
 
-@keyframes slide-up {
-  from {
-    transform: translateY(10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+.hover-gradient {
+  @apply hover:bg-gradient-to-r hover:from-primary hover:to-purple-500 hover:text-white transition-all duration-300;
 }
 
-@keyframes slide-down {
-  from {
-    transform: translateY(-10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+.card-hover {
+  @apply hover:shadow-lg transition-all duration-300 hover:-translate-y-1;
 }
 
-@keyframes scale-in {
-  from {
-    transform: scale(0.95);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
+.btn-primary {
+  @apply bg-primary hover:bg-primary/90 text-primary-foreground rounded-md px-4 py-2 transition-colors;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.btn-secondary {
+  @apply bg-secondary hover:bg-secondary/90 text-secondary-foreground rounded-md px-4 py-2 transition-colors;
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+.btn-outline {
+  @apply border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md px-4 py-2 transition-colors;
 }
 
-@layer utilities {
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out forwards;
-  }
+.btn-destructive {
+  @apply bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-md px-4 py-2 transition-colors;
+}
 
-  .animate-slide-up {
-    animation: slide-up 0.3s ease-out forwards;
-  }
-
-  .animate-slide-down {
-    animation: slide-down 0.3s ease-out forwards;
-  }
-
-  .animate-scale-in {
-    animation: scale-in 0.3s ease-out forwards;
-  }
-
-  .animate-spin {
-    animation: spin 1s linear infinite;
-  }
-
-  .animate-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-  
-  /* Text gradient utilities */
-  .text-gradient-primary {
-    @apply bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent;
-  }
-  
-  .text-gradient-secondary {
-    @apply bg-gradient-to-r from-secondary to-purple-400 bg-clip-text text-transparent;
-  }
-  
-  .text-gradient-success {
-    @apply bg-gradient-to-r from-success to-green-400 bg-clip-text text-transparent;
-  }
-  
-  /* Background gradient utilities */
-  .bg-gradient-primary {
-    @apply bg-gradient-to-r from-primary to-blue-400;
-  }
-  
-  .bg-gradient-secondary {
-    @apply bg-gradient-to-r from-secondary to-purple-400;
-  }
-  
-  .bg-gradient-success {
-    @apply bg-gradient-to-r from-success to-green-400;
-  }
-  
-  /* Card hover effects */
-  .card-hover {
-    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
-  }
-  
-  /* Custom scrollbar */
-  .custom-scrollbar {
-    @apply scrollbar-thin scrollbar-thumb-primary scrollbar-track-secondary;
-  }
-  
-  /* Dashboard card styles */
-  .dashboard-card {
-    @apply rounded-lg border bg-card p-6 shadow-sm;
-  }
-  
-  /* Chart container styles */
-  .chart-container {
-    @apply h-64 w-full rounded-md border bg-card p-4;
-  }
-  
-  /* Stats indicator styles */
-  .stats-up {
-    @apply text-success flex items-center;
-  }
-  
-  .stats-down {
-    @apply text-destructive flex items-center;
-  }
-  
-  /* Table styles */
-  .table-row-alternate {
-    @apply even:bg-muted/50;
-  }
-  
-  /* Form layout styles */
-  .form-grid {
-    @apply grid grid-cols-1 md:grid-cols-2 gap-6;
-  }
-  
-  /* Button group */
-  .button-group {
-    @apply flex flex-wrap gap-2;
-  }
-  
-  /* Badge variants */
-  .badge-success {
-    @apply bg-success/20 text-success rounded-full px-2 py-0.5 text-xs font-medium;
-  }
-  
-  .badge-warning {
-    @apply bg-warning/20 text-warning rounded-full px-2 py-0.5 text-xs font-medium;
-  }
-  
-  .badge-error {
-    @apply bg-destructive/20 text-destructive rounded-full px-2 py-0.5 text-xs font-medium;
-  }
-  
-  .badge-info {
-    @apply bg-primary/20 text-primary rounded-full px-2 py-0.5 text-xs font-medium;
-  }
-  
-  .badge-pending {
-    @apply bg-secondary/20 text-secondary-foreground rounded-full px-2 py-0.5 text-xs font-medium;
-  }
+.form-input {
+  @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
 }
