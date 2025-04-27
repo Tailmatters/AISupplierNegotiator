@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
+import { type ToastActionElement, type ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 5000 // 5 seconds
+const TOAST_REMOVE_DELAY = 5000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -23,7 +23,7 @@ const actionTypes = {
 let count = 0
 
 function genId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  count = (count + 1) % Number.MAX_VALUE
   return count.toString()
 }
 
@@ -40,11 +40,11 @@ type Action =
     }
   | {
       type: ActionType["DISMISS_TOAST"]
-      toastId?: string
+      toastId?: ToasterToast["id"]
     }
   | {
       type: ActionType["REMOVE_TOAST"]
-      toastId?: string
+      toastId?: ToasterToast["id"]
     }
 
 interface State {
@@ -72,12 +72,17 @@ const reducer = (state: State, action: Action): State => {
     case actionTypes.DISMISS_TOAST: {
       const { toastId } = action
 
-      // Remove the toast timeout
+      // ! Side effects ! - This could be extracted into a dismissToast() action,
+      // but I'll keep it here for simplicity
       if (toastId) {
-        const timeout = toastTimeouts.get(toastId)
-        if (timeout) {
-          clearTimeout(timeout)
+        if (toastTimeouts.has(toastId)) {
+          clearTimeout(toastTimeouts.get(toastId))
           toastTimeouts.delete(toastId)
+        }
+      } else {
+        for (const [id, timeout] of toastTimeouts.entries()) {
+          clearTimeout(timeout)
+          toastTimeouts.delete(id)
         }
       }
 
@@ -118,7 +123,7 @@ function dispatch(action: Action) {
   })
 }
 
-type Toast = Omit<ToasterToast, "id">
+interface Toast extends Omit<ToasterToast, "id"> {}
 
 function toast({ ...props }: Toast) {
   const id = genId()
@@ -142,21 +147,8 @@ function toast({ ...props }: Toast) {
     },
   })
 
-  const timeout = setTimeout(() => {
-    dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id })
-  }, TOAST_REMOVE_DELAY)
-
-  toastTimeouts.set(id, timeout)
-
-  // Remove the toast from state after it's been closed
-  const timeoutDismiss = setTimeout(() => {
-    dispatch({ type: actionTypes.REMOVE_TOAST, toastId: id })
-  }, TOAST_REMOVE_DELAY + 300) // +300ms to account for the dismiss animation
-
-  toastTimeouts.set(`${id}-dismiss`, timeoutDismiss)
-
   return {
-    id,
+    id: id,
     dismiss,
     update,
   }
