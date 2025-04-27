@@ -1,25 +1,29 @@
 'use client'
 
 import * as React from 'react'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClient } from '@/lib/query-client'
+import { ReactNode } from 'react'
+import { QueryClientProvider } from '@/lib/query-client'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/hooks/use-auth'
-import { ToastProvider } from '@/hooks/use-toast'
+import { Toaster } from '@/components/ui/toaster'
 
-// Combine all providers
-export function Providers({ children }: { children: React.ReactNode }) {
+interface ProvidersProps {
+  children: ReactNode
+}
+
+export function Providers({ children }: ProvidersProps) {
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider>
       <ThemeProvider
         attribute="class"
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
       >
-        <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </ToastProvider>
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )

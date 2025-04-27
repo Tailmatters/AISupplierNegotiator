@@ -1,95 +1,169 @@
-import { clsx, type ClassValue } from 'clsx'
+import { ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { formatDistanceToNow, format, parseISO } from 'date-fns'
 
 /**
- * Combines multiple class names and Tailwind classes
+ * Combines class names with tailwind-merge for optimal class merging
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Formats a date for display
+ * Formats a date as a relative string (e.g., "5 minutes ago")
  */
-export function formatDate(input: string | number | Date): string {
-  const date = new Date(input)
-  return date.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
+export function formatRelativeTime(dateString?: string | Date): string {
+  if (!dateString) return ''
+  
+  const date = typeof dateString === 'string' ? parseISO(dateString) : dateString
+  return formatDistanceToNow(date, { addSuffix: true })
 }
 
 /**
- * Formats a currency for display
+ * Formats a date with a custom format
+ */
+export function formatDate(
+  dateString?: string | Date,
+  dateFormat = 'MMM d, yyyy'
+): string {
+  if (!dateString) return ''
+  
+  const date = typeof dateString === 'string' ? parseISO(dateString) : dateString
+  return format(date, dateFormat)
+}
+
+/**
+ * Formats a currency value
  */
 export function formatCurrency(amount: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
+    minimumFractionDigits: 2,
   }).format(amount)
 }
 
 /**
- * Formats a number with thousand separators
+ * Formats a number with a specific format
  */
-export function formatNumber(number: number): string {
-  return new Intl.NumberFormat('en-US').format(number)
+export function formatNumber(
+  number: number,
+  options: Intl.NumberFormatOptions = {}
+): string {
+  return new Intl.NumberFormat('en-US', options).format(number)
+}
+
+/**
+ * Formats a percentage value
+ */
+export function formatPercent(value: number, digits = 1): string {
+  return `${value.toFixed(digits)}%`
 }
 
 /**
  * Truncates a string to a specified length
  */
-export function truncate(str: string, length: number): string {
-  if (!str || str.length <= length) return str
-  return `${str.slice(0, length)}...`
+export function truncateString(str: string, length = 100): string {
+  return str.length > length ? `${str.substring(0, length)}...` : str
 }
 
 /**
- * Capitalizes the first letter of a string
+ * Creates a delay promise
  */
-export function capitalize(str: string): string {
-  if (!str || typeof str !== 'string') return ''
-  return str.charAt(0).toUpperCase() + str.slice(1)
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
- * Checks if a value is truly empty (null, undefined, empty string, empty array, empty object)
+ * Safely parses JSON without throwing errors
  */
-export function isEmpty(value: unknown): boolean {
-  if (value === null || value === undefined) return true
-  if (typeof value === 'string' && value.trim() === '') return true
-  if (Array.isArray(value) && value.length === 0) return true
-  if (typeof value === 'object' && Object.keys(value as object).length === 0) return true
-  return false
+export function safelyParseJSON<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json)
+  } catch (e) {
+    return fallback
+  }
 }
 
 /**
- * Deep merges two objects
+ * Deep merges objects
  */
-export function deepMerge<T>(target: T, source: any): T {
-  const output = { ...target }
+export function deepMerge<T extends object = object>(target: T, ...sources: object[]): T {
+  if (!sources.length) return target
   
-  if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach(key => {
-      if (isObject(source[key])) {
-        if (!(key in target)) {
-          Object.assign(output, { [key]: source[key] })
-        } else {
-          output[key] = deepMerge(target[key], source[key])
-        }
+  const source = sources.shift()
+  
+  if (source === undefined) {
+    return target
+  }
+  
+  if (isMergeableObject(target) && isMergeableObject(source)) {
+    Object.keys(source).forEach((key) => {
+      if (isMergeableObject(source[key])) {
+        if (!target[key]) Object.assign(target, { [key]: {} })
+        deepMerge(target[key], source[key])
       } else {
-        Object.assign(output, { [key]: source[key] })
+        Object.assign(target, { [key]: source[key] })
       }
     })
   }
   
-  return output
+  return deepMerge(target, ...sources)
+}
+
+function isMergeableObject(item: any): item is Record<string, any> {
+  return item && typeof item === 'object' && !Array.isArray(item)
 }
 
 /**
- * Checks if a value is an object
+ * Groups an array by a specific key
  */
-function isObject(item: any): boolean {
-  return (item && typeof item === 'object' && !Array.isArray(item))
+export function groupBy<T, K extends keyof any>(
+  array: T[],
+  getKey: (item: T) => K
+): Record<K, T[]> {
+  return array.reduce((result, item) => {
+    const key = getKey(item)
+    if (!result[key]) {
+      result[key] = []
+    }
+    result[key].push(item)
+    return result
+  }, {} as Record<K, T[]>)
+}
+
+/**
+ * Creates a debounced version of a function
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  fn: T,
+  ms = 300
+): (...args: Parameters<T>) => void {
+  let timeoutId: ReturnType<typeof setTimeout>
+  
+  return function(...args: Parameters<T>) {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn(...args), ms)
+  }
+}
+
+/**
+ * Creates an array of numbers in range
+ */
+export function range(start: number, end: number): number[] {
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
+/**
+ * Generates a random string
+ */
+export function generateRandomString(length = 8): string {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length))
+  }
+  
+  return result
 }

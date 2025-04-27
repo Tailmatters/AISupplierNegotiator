@@ -1,13 +1,13 @@
 'use client'
 
 import * as React from 'react'
-import { 
-  type ToastActionElement, 
-  type ToastProps 
+import type { 
+  ToastActionElement, 
+  ToastProps 
 } from '@/components/ui/toast'
 
-const TOAST_LIMIT = 10
-const TOAST_REMOVE_DELAY = 1000
+const TOAST_LIMIT = 5
+const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -75,40 +75,48 @@ const reducer = (state: State, action: Action): State => {
     case actionTypes.DISMISS_TOAST: {
       const { toastId } = action
 
-      // dismiss all toasts
-      if (toastId === undefined) {
+      if (toastId) {
+        toastTimeouts.forEach((_, id) => {
+          if (id === toastId) {
+            toastTimeouts.delete(id)
+          }
+        })
+
         return {
           ...state,
-          toasts: state.toasts.map((t) => ({
-            ...t,
-            open: false,
-          })),
+          toasts: state.toasts.map((t) =>
+            t.id === toastId
+              ? {
+                  ...t,
+                  open: false,
+                }
+              : t
+          ),
         }
       }
 
-      // dismiss single toast by id
       return {
         ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === toastId ? { ...t, open: false } : t
-        ),
+        toasts: state.toasts.map((t) => ({
+          ...t,
+          open: false,
+        })),
       }
     }
+    
     case actionTypes.REMOVE_TOAST: {
       const { toastId } = action
 
-      // remove all toasts
-      if (toastId === undefined) {
+      if (toastId) {
         return {
           ...state,
-          toasts: [],
+          toasts: state.toasts.filter((t) => t.id !== toastId),
         }
       }
 
-      // remove single toast by id
       return {
         ...state,
-        toasts: state.toasts.filter((t) => t.id !== toastId),
+        toasts: [],
       }
     }
   }
@@ -125,7 +133,7 @@ function dispatch(action: Action) {
   })
 }
 
-interface Toast extends Omit<ToasterToast, 'id'> {}
+type Toast = Omit<ToasterToast, 'id'>
 
 function toast({ ...props }: Toast) {
   const id = genId()
@@ -135,9 +143,8 @@ function toast({ ...props }: Toast) {
       type: actionTypes.UPDATE_TOAST,
       toast: { ...props, id },
     })
-
-  const dismiss = () =>
-    dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id })
+  
+  const dismiss = () => dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id })
 
   dispatch({
     type: actionTypes.ADD_TOAST,
@@ -174,14 +181,8 @@ function useToast() {
   return {
     ...state,
     toast,
-    dismiss: (toastId?: string) =>
-      dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
+    dismiss: (toastId?: string) => dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
   }
-}
-
-// Provider function to wrap the app for toast
-export function ToastProvider({ children }: { children: React.ReactNode }) {
-  return children
 }
 
 export { useToast, toast }

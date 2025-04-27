@@ -5,7 +5,7 @@ import { comparePasswords, createToken } from '@/lib/auth'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-// Define the login schema for validation
+// Schema for login validation
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
@@ -15,16 +15,16 @@ export async function POST(request: NextRequest) {
   try {
     // Parse and validate the request body
     const body = await request.json()
-    const result = loginSchema.safeParse(body)
+    const validation = loginSchema.safeParse(body)
     
-    if (!result.success) {
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Invalid input', details: result.error.errors },
+        { error: validation.error.errors[0].message },
         { status: 400 }
       )
     }
     
-    const { username, password } = result.data
+    const { username, password } = validation.data
     
     // Find the user by username
     const [user] = await db
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       .from(users)
       .where(eq(users.username, username))
     
-    // If user does not exist or password doesn't match
+    // If no user found or password doesn't match
     if (!user || !(await comparePasswords(password, user.password))) {
       return NextResponse.json(
         { error: 'Invalid username or password' },
@@ -40,25 +40,18 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Create a JWT token
-    await createToken({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    })
+    // Remove password from user object
+    const { password: _, ...safeUser } = user
     
-    // Return user data without password
-    const { password: _, ...userData } = user
+    // Create a token and set it in a cookie
+    await createToken(safeUser)
     
-    return NextResponse.json(userData)
+    // Return the user without the password
+    return NextResponse.json(safeUser)
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to login' },
       { status: 500 }
     )
   }
