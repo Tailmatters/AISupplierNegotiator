@@ -11,19 +11,5 @@ if (!process.env.DATABASE_URL) {
   )
 }
 
-// Create a new pool instance with the connection string
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-
-// Create a Drizzle ORM instance with the pool and schema
 export const db = drizzle(pool, { schema })
-
-// Helper function to execute SQL queries
-export async function executeQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
-  try {
-    const { rows } = await pool.query(sql, params)
-    return rows as T[]
-  } catch (error) {
-    console.error('Database query error:', error)
-    throw error
-  }
-}

@@ -1,9 +1,8 @@
-import { pgTable, pgEnum, text, integer, uuid, timestamp, jsonb, boolean, numeric } from "drizzle-orm/pg-core"
-import { relations } from "drizzle-orm"
+import { pgTable, text, integer, uuid, timestamp, pgEnum, boolean, date, numeric, jsonb } from "drizzle-orm/pg-core"
 import { createInsertSchema, createSelectSchema } from "drizzle-zod"
+import { relations } from "drizzle-orm"
 import { z } from "zod"
 
-// Enums
 export const roleEnum = pgEnum('role', ['admin', 'buyer', 'supplier'])
 export const invitationStatusEnum = pgEnum('invitation_status', ['pending', 'accepted', 'declined'])
 export const negotiationStatusEnum = pgEnum('negotiation_status', ['draft', 'active', 'completed', 'cancelled'])
@@ -12,16 +11,17 @@ export const contractStatusEnum = pgEnum('contract_status', ['draft', 'sent', 's
 export const messageTypeEnum = pgEnum('message_type', ['text', 'proposal', 'contract', 'file'])
 export const widgetTypeEnum = pgEnum('widget_type', ['spend_summary', 'supplier_chart', 'category_breakdown', 'negotiation_status', 'savings_trend', 'custom'])
 
-// Tables
 export const users = pgTable('users', {
   id: integer('id').primaryKey().notNull(),
   username: text('username').notNull().unique(),
-  name: text('name').notNull(),
-  email: text('email').notNull(),
   password: text('password').notNull(),
   role: roleEnum('role').default('buyer').notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  name: text('name'),
+  email: text('email'),
+  companyName: text('company_name'),
+  companyLogo: text('company_logo'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const suppliers = pgTable('suppliers', {
@@ -30,326 +30,325 @@ export const suppliers = pgTable('suppliers', {
   email: text('email').notNull(),
   phone: text('phone'),
   website: text('website'),
+  category: text('category'),
   address: text('address'),
-  category_level1: text('category_level1'),
-  category_level2: text('category_level2'),
-  category_level3: text('category_level3'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  created_by: integer('created_by').references(() => users.id),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  contactName: text('contact_name'),
+  contactTitle: text('contact_title'),
+  notes: text('notes'),
+  userId: integer('user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const negotiations = pgTable('negotiations', {
   id: integer('id').primaryKey().notNull(),
   title: text('title').notNull(),
-  supplier_id: integer('supplier_id').references(() => suppliers.id).notNull(),
-  created_by: integer('created_by').references(() => users.id).notNull(),
+  description: text('description'),
+  category: text('category').notNull(),
   status: negotiationStatusEnum('status').default('draft').notNull(),
-  category_level1: text('category_level1'),
-  category_level2: text('category_level2'),
-  category_level3: text('category_level3'),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  supplierId: integer('supplier_id').references(() => suppliers.id).notNull(),
+  initialOffer: numeric('initial_offer'),
+  targetOffer: numeric('target_offer'),
+  finalOffer: numeric('final_offer'),
   objectives: jsonb('objectives'),
-  final_offer: numeric('final_offer'),
-  initial_offer: numeric('initial_offer'),
-  savings_amount: numeric('savings_amount'),
-  savings_percentage: numeric('savings_percentage'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
-  concluded_at: timestamp('concluded_at'),
+  aiNotes: text('ai_notes'),
+  startDate: timestamp('start_date'),
+  endDate: timestamp('end_date'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const messages = pgTable('messages', {
   id: integer('id').primaryKey().notNull(),
-  negotiation_id: integer('negotiation_id').references(() => negotiations.id).notNull(),
-  sender_id: integer('sender_id').references(() => users.id),
-  sender_type: text('sender_type').notNull(), // 'ai', 'buyer', 'supplier'
-  message_type: messageTypeEnum('message_type').default('text').notNull(),
+  negotiationId: integer('negotiation_id').references(() => negotiations.id).notNull(),
+  senderId: integer('sender_id').references(() => users.id),
+  senderType: text('sender_type').notNull(), // 'user', 'supplier', 'system', 'ai'
+  messageType: messageTypeEnum('message_type').default('text').notNull(),
   content: text('content').notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  related_entity_id: integer('related_entity_id'), // Could reference proposals, contracts, etc.
-  file_path: text('file_path'),
-  file_name: text('file_name'),
-  is_visible_to_supplier: boolean('is_visible_to_supplier').default(true).notNull(),
+  metadata: jsonb('metadata'),
+  read: boolean('read').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
 export const invitations = pgTable('invitations', {
   id: integer('id').primaryKey().notNull(),
-  negotiation_id: integer('negotiation_id').references(() => negotiations.id).notNull(),
-  supplier_id: integer('supplier_id').references(() => suppliers.id).notNull(),
-  token: uuid('token').notNull(),
+  negotiationId: integer('negotiation_id').references(() => negotiations.id).notNull(),
+  token: uuid('token').defaultRandom().notNull(),
+  email: text('email').notNull(),
   status: invitationStatusEnum('status').default('pending').notNull(),
-  email_sent: boolean('email_sent').default(false).notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
-  expired_at: timestamp('expired_at'),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const contractTemplates = pgTable('contract_templates', {
   id: integer('id').primaryKey().notNull(),
   name: text('name').notNull(),
+  description: text('description'),
+  category: text('category'),
   content: text('content').notNull(),
-  created_by: integer('created_by').references(() => users.id).notNull(),
-  category_level1: text('category_level1'),
-  category_level2: text('category_level2'),
-  category_level3: text('category_level3'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const contracts = pgTable('contracts', {
   id: integer('id').primaryKey().notNull(),
-  title: text('title').notNull(),
-  negotiation_id: integer('negotiation_id').references(() => negotiations.id).notNull(),
-  template_id: integer('template_id').references(() => contractTemplates.id),
+  name: text('name').notNull(),
+  negotiationId: integer('negotiation_id').references(() => negotiations.id).notNull(),
+  templateId: integer('template_id').references(() => contractTemplates.id),
   content: text('content').notNull(),
   status: contractStatusEnum('status').default('draft').notNull(),
-  created_by: integer('created_by').references(() => users.id).notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
-  signed_at: timestamp('signed_at'),
-  start_date: timestamp('start_date'),
-  end_date: timestamp('end_date'),
+  signedBy: integer('signed_by').references(() => users.id),
+  signedAt: timestamp('signed_at'),
+  effectiveDate: date('effective_date'),
+  expirationDate: date('expiration_date'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const proposals = pgTable('proposals', {
   id: integer('id').primaryKey().notNull(),
-  negotiation_id: integer('negotiation_id').references(() => negotiations.id).notNull(),
-  creator_id: integer('creator_id').references(() => users.id),
-  creator_type: text('creator_type').notNull(), // 'ai', 'buyer', 'supplier'
+  negotiationId: integer('negotiation_id').references(() => negotiations.id).notNull(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  amount: numeric('amount'),
   status: proposalStatusEnum('status').default('draft').notNull(),
-  price: numeric('price'),
-  terms: jsonb('terms'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
-  valid_until: timestamp('valid_until'),
-  is_visible_to_supplier: boolean('is_visible_to_supplier').default(true).notNull(),
+  createdById: integer('created_by_id').references(() => users.id),
+  createdByType: text('created_by_type').notNull(), // 'user', 'supplier', 'ai'
+  respondedById: integer('responded_by_id').references(() => users.id),
+  respondedByType: text('responded_by_type'), // 'user', 'supplier', 'ai'
+  respondedAt: timestamp('responded_at'),
+  fileUrl: text('file_url'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const spendUploads = pgTable('spend_uploads', {
   id: integer('id').primaryKey().notNull(),
-  user_id: integer('user_id').references(() => users.id).notNull(),
-  file_name: text('file_name').notNull(),
-  file_path: text('file_path'),
-  row_count: integer('row_count'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  status: text('status').default('pending').notNull(), // 'pending', 'processing', 'completed', 'error'
-  error_message: text('error_message'),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  filename: text('filename').notNull(),
+  filesize: integer('filesize').notNull(),
+  recordCount: integer('record_count'),
+  source: text('source').notNull(), // 'csv', 'api', etc.
+  status: text('status').notNull(), // 'processing', 'completed', 'error'
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const spendData = pgTable('spend_data', {
   id: integer('id').primaryKey().notNull(),
-  upload_id: integer('upload_id').references(() => spendUploads.id).notNull(),
-  supplier_id: integer('supplier_id').references(() => suppliers.id),
-  supplier_name: text('supplier_name').notNull(),
-  invoice_number: text('invoice_number'),
-  invoice_date: timestamp('invoice_date'),
-  category_level1: text('category_level1'),
-  category_level2: text('category_level2'),
-  category_level3: text('category_level3'),
+  uploadId: integer('upload_id').references(() => spendUploads.id).notNull(),
+  supplierId: integer('supplier_id').references(() => suppliers.id),
+  supplierName: text('supplier_name').notNull(),
+  categoryLevel1: text('category_level_1'),
+  categoryLevel2: text('category_level_2'),
+  categoryLevel3: text('category_level_3'),
+  description: text('description'),
   amount: numeric('amount').notNull(),
   currency: text('currency').default('USD').notNull(),
-  description: text('description'),
-  item_code: text('item_code'),
-  quantity: numeric('quantity'),
-  unit_price: numeric('unit_price'),
-  year: integer('year'),
-  month: integer('month'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
+  date: date('date').notNull(),
+  invoiceNumber: text('invoice_number'),
+  poNumber: text('po_number'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
 export const apiConnections = pgTable('api_connections', {
   id: integer('id').primaryKey().notNull(),
-  user_id: integer('user_id').references(() => users.id).notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
   name: text('name').notNull(),
-  api_type: text('api_type').notNull(), // 'coupa', 'sap', 'custom', etc.
-  credentials: jsonb('credentials'),
-  status: text('status').default('active').notNull(),
-  last_sync: timestamp('last_sync'),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  type: text('type').notNull(), // 'erp', 'procure-to-pay', etc.
+  config: jsonb('config').notNull(),
+  status: text('status').notNull(), // 'active', 'inactive', 'error'
+  lastSyncAt: timestamp('last_sync_at'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const widgetTypes = pgTable('widget_types', {
   id: integer('id').primaryKey().notNull(),
+  type: widgetTypeEnum('type').notNull(),
   name: text('name').notNull(),
   description: text('description'),
-  config_schema: jsonb('config_schema'),
-  widget_type: widgetTypeEnum('widget_type').notNull(),
-  is_system: boolean('is_system').default(false).notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
+  defaultConfig: jsonb('default_config'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const dashboards = pgTable('dashboards', {
   id: integer('id').primaryKey().notNull(),
-  user_id: integer('user_id').references(() => users.id).notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
   name: text('name').notNull(),
-  is_default: boolean('is_default').default(false).notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  isDefault: boolean('is_default').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 export const dashboardWidgets = pgTable('dashboard_widgets', {
   id: integer('id').primaryKey().notNull(),
-  dashboard_id: integer('dashboard_id').references(() => dashboards.id).notNull(),
-  widget_type_id: integer('widget_type_id').references(() => widgetTypes.id).notNull(),
-  title: text('title').notNull(),
+  dashboardId: integer('dashboard_id').references(() => dashboards.id).notNull(),
+  widgetTypeId: integer('widget_type_id').references(() => widgetTypes.id).notNull(),
+  position: integer('position').notNull(),
+  size: text('size').default('medium').notNull(), // 'small', 'medium', 'large'
+  title: text('title'),
   config: jsonb('config'),
-  position_x: integer('position_x').default(0).notNull(),
-  position_y: integer('position_y').default(0).notNull(),
-  width: integer('width').default(1).notNull(),
-  height: integer('height').default(1).notNull(),
-  created_at: timestamp('created_at').defaultNow().notNull(),
-  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// Zod Schemas
+// Schema for inserting users
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
-  name: true,
-  email: true,
   password: true,
   role: true,
+  name: true,
+  email: true,
+  companyName: true,
+  companyLogo: true,
 })
 
+// Schema for inserting suppliers
 export const insertSupplierSchema = createInsertSchema(suppliers).pick({
   name: true,
   email: true,
   phone: true,
   website: true,
+  category: true,
   address: true,
-  category_level1: true,
-  category_level2: true,
-  category_level3: true,
-  created_by: true,
+  contactName: true,
+  contactTitle: true,
+  notes: true,
+  userId: true,
 })
 
+// Schema for inserting negotiations
 export const insertNegotiationSchema = createInsertSchema(negotiations).pick({
   title: true,
-  supplier_id: true,
-  created_by: true,
+  description: true,
+  category: true,
   status: true,
-  category_level1: true,
-  category_level2: true,
-  category_level3: true,
+  userId: true,
+  supplierId: true,
+  initialOffer: true,
+  targetOffer: true,
   objectives: true,
-  initial_offer: true,
+  startDate: true,
 })
 
+// Schema for inserting messages
 export const insertMessageSchema = createInsertSchema(messages).pick({
-  negotiation_id: true,
-  sender_id: true,
-  sender_type: true,
-  message_type: true,
+  negotiationId: true,
+  senderId: true,
+  senderType: true,
+  messageType: true,
   content: true,
-  related_entity_id: true,
-  file_path: true,
-  file_name: true,
-  is_visible_to_supplier: true,
+  metadata: true,
 })
 
+// Schema for inserting invitations
 export const insertInvitationSchema = createInsertSchema(invitations).pick({
-  negotiation_id: true,
-  supplier_id: true,
-  token: true,
-  status: true,
-  email_sent: true,
-  expired_at: true,
+  negotiationId: true,
+  email: true,
+  expiresAt: true,
 })
 
+// Schema for inserting proposals
 export const insertProposalSchema = createInsertSchema(proposals).pick({
-  negotiation_id: true,
-  creator_id: true,
-  creator_type: true,
+  negotiationId: true,
+  title: true,
+  content: true,
+  amount: true,
   status: true,
-  price: true,
-  terms: true,
-  valid_until: true,
-  is_visible_to_supplier: true,
+  createdById: true,
+  createdByType: true,
+  fileUrl: true,
 })
 
+// Schema for inserting contract templates
 export const insertContractTemplateSchema = createInsertSchema(contractTemplates).pick({
   name: true,
+  description: true,
+  category: true,
   content: true,
-  created_by: true,
-  category_level1: true,
-  category_level2: true,
-  category_level3: true,
+  userId: true,
 })
 
+// Schema for inserting contracts
 export const insertContractSchema = createInsertSchema(contracts).pick({
-  title: true,
-  negotiation_id: true,
-  template_id: true,
+  name: true,
+  negotiationId: true,
+  templateId: true,
   content: true,
   status: true,
-  created_by: true,
-  signed_at: true,
-  start_date: true,
-  end_date: true,
+  effectiveDate: true,
+  expirationDate: true,
 })
 
+// Schema for inserting spend uploads
 export const insertSpendUploadSchema = createInsertSchema(spendUploads).pick({
-  user_id: true,
-  file_name: true,
-  file_path: true,
-  row_count: true,
+  userId: true,
+  filename: true,
+  filesize: true,
+  source: true,
   status: true,
-  error_message: true,
 })
 
+// Schema for inserting spend data
 export const insertSpendDataSchema = createInsertSchema(spendData).pick({
-  upload_id: true,
-  supplier_id: true,
-  supplier_name: true,
-  invoice_number: true,
-  invoice_date: true,
-  category_level1: true,
-  category_level2: true,
-  category_level3: true,
+  uploadId: true,
+  supplierId: true,
+  supplierName: true,
+  categoryLevel1: true,
+  categoryLevel2: true,
+  categoryLevel3: true,
+  description: true,
   amount: true,
   currency: true,
-  description: true,
-  item_code: true,
-  quantity: true,
-  unit_price: true,
-  year: true,
-  month: true,
+  date: true,
+  invoiceNumber: true,
+  poNumber: true,
+  metadata: true,
 })
 
+// Schema for inserting API connections
 export const insertApiConnectionSchema = createInsertSchema(apiConnections).pick({
-  user_id: true,
+  userId: true,
   name: true,
-  api_type: true,
-  credentials: true,
+  type: true,
+  config: true,
   status: true,
 })
 
+// Schema for inserting widget types
 export const insertWidgetTypeSchema = createInsertSchema(widgetTypes).pick({
+  type: true,
   name: true,
   description: true,
-  config_schema: true,
-  widget_type: true,
-  is_system: true,
+  defaultConfig: true,
 })
 
+// Schema for inserting dashboards
 export const insertDashboardSchema = createInsertSchema(dashboards).pick({
-  user_id: true,
+  userId: true,
   name: true,
-  is_default: true,
+  isDefault: true,
 })
 
+// Schema for inserting dashboard widgets
 export const insertDashboardWidgetSchema = createInsertSchema(dashboardWidgets).pick({
-  dashboard_id: true,
-  widget_type_id: true,
+  dashboardId: true,
+  widgetTypeId: true,
+  position: true,
+  size: true,
   title: true,
   config: true,
-  position_x: true,
-  position_y: true,
-  width: true,
-  height: true,
 })
 
-// Types
+// TypeScript types
 export type InsertUser = z.infer<typeof insertUserSchema>
 export type User = typeof users.$inferSelect
 
@@ -394,161 +393,139 @@ export type DashboardWidget = typeof dashboardWidgets.$inferSelect
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
-  suppliers: many(suppliers, { relationName: "userSuppliers" }),
-  negotiations: many(negotiations, { relationName: "userNegotiations" }),
-  contractTemplates: many(contractTemplates, { relationName: "userContractTemplates" }),
-  contracts: many(contracts, { relationName: "userContracts" }),
-  spendUploads: many(spendUploads, { relationName: "userSpendUploads" }),
-  apiConnections: many(apiConnections, { relationName: "userApiConnections" }),
-  dashboards: many(dashboards, { relationName: "userDashboards" }),
+  suppliers: many(suppliers),
+  negotiations: many(negotiations),
+  contractTemplates: many(contractTemplates),
+  dashboards: many(dashboards),
+  apiConnections: many(apiConnections),
+  spendUploads: many(spendUploads),
 }))
 
 export const suppliersRelations = relations(suppliers, ({ many, one }) => ({
-  negotiations: many(negotiations, { relationName: "supplierNegotiations" }),
-  invitations: many(invitations, { relationName: "supplierInvitations" }),
-  spendData: many(spendData, { relationName: "supplierSpendData" }),
-  creator: one(users, {
-    fields: [suppliers.created_by],
+  user: one(users, {
+    fields: [suppliers.userId],
     references: [users.id],
-    relationName: "userSuppliers",
   }),
+  negotiations: many(negotiations),
+  spendData: many(spendData),
 }))
 
 export const negotiationsRelations = relations(negotiations, ({ one, many }) => ({
-  supplier: one(suppliers, {
-    fields: [negotiations.supplier_id],
-    references: [suppliers.id],
-    relationName: "supplierNegotiations",
-  }),
-  creator: one(users, {
-    fields: [negotiations.created_by],
+  user: one(users, {
+    fields: [negotiations.userId],
     references: [users.id],
-    relationName: "userNegotiations",
   }),
-  messages: many(messages, { relationName: "negotiationMessages" }),
-  invitations: many(invitations, { relationName: "negotiationInvitations" }),
-  proposals: many(proposals, { relationName: "negotiationProposals" }),
-  contracts: many(contracts, { relationName: "negotiationContracts" }),
+  supplier: one(suppliers, {
+    fields: [negotiations.supplierId],
+    references: [suppliers.id],
+  }),
+  messages: many(messages),
+  invitations: many(invitations),
+  proposals: many(proposals),
+  contracts: many(contracts),
 }))
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   negotiation: one(negotiations, {
-    fields: [messages.negotiation_id],
+    fields: [messages.negotiationId],
     references: [negotiations.id],
-    relationName: "negotiationMessages",
   }),
   sender: one(users, {
-    fields: [messages.sender_id],
+    fields: [messages.senderId],
     references: [users.id],
-    relationName: "userMessages",
   }),
 }))
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
   negotiation: one(negotiations, {
-    fields: [invitations.negotiation_id],
+    fields: [invitations.negotiationId],
     references: [negotiations.id],
-    relationName: "negotiationInvitations",
-  }),
-  supplier: one(suppliers, {
-    fields: [invitations.supplier_id],
-    references: [suppliers.id],
-    relationName: "supplierInvitations",
   }),
 }))
 
 export const proposalsRelations = relations(proposals, ({ one }) => ({
   negotiation: one(negotiations, {
-    fields: [proposals.negotiation_id],
+    fields: [proposals.negotiationId],
     references: [negotiations.id],
-    relationName: "negotiationProposals",
   }),
-  creator: one(users, {
-    fields: [proposals.creator_id],
+  createdBy: one(users, {
+    fields: [proposals.createdById],
     references: [users.id],
-    relationName: "userProposals",
+  }),
+  respondedBy: one(users, {
+    fields: [proposals.respondedById],
+    references: [users.id],
   }),
 }))
 
 export const contractTemplatesRelations = relations(contractTemplates, ({ one, many }) => ({
-  creator: one(users, {
-    fields: [contractTemplates.created_by],
+  user: one(users, {
+    fields: [contractTemplates.userId],
     references: [users.id],
-    relationName: "userContractTemplates",
   }),
-  contracts: many(contracts, { relationName: "templateContracts" }),
+  contracts: many(contracts),
 }))
 
 export const contractsRelations = relations(contracts, ({ one }) => ({
   negotiation: one(negotiations, {
-    fields: [contracts.negotiation_id],
+    fields: [contracts.negotiationId],
     references: [negotiations.id],
-    relationName: "negotiationContracts",
   }),
   template: one(contractTemplates, {
-    fields: [contracts.template_id],
+    fields: [contracts.templateId],
     references: [contractTemplates.id],
-    relationName: "templateContracts",
   }),
-  creator: one(users, {
-    fields: [contracts.created_by],
+  signedBy: one(users, {
+    fields: [contracts.signedBy],
     references: [users.id],
-    relationName: "userContracts",
   }),
 }))
 
 export const spendUploadsRelations = relations(spendUploads, ({ one, many }) => ({
   user: one(users, {
-    fields: [spendUploads.user_id],
+    fields: [spendUploads.userId],
     references: [users.id],
-    relationName: "userSpendUploads",
   }),
-  spendData: many(spendData, { relationName: "uploadSpendData" }),
+  spendData: many(spendData),
 }))
 
 export const spendDataRelations = relations(spendData, ({ one }) => ({
   upload: one(spendUploads, {
-    fields: [spendData.upload_id],
+    fields: [spendData.uploadId],
     references: [spendUploads.id],
-    relationName: "uploadSpendData",
   }),
   supplier: one(suppliers, {
-    fields: [spendData.supplier_id],
+    fields: [spendData.supplierId],
     references: [suppliers.id],
-    relationName: "supplierSpendData",
   }),
 }))
 
 export const apiConnectionsRelations = relations(apiConnections, ({ one }) => ({
   user: one(users, {
-    fields: [apiConnections.user_id],
+    fields: [apiConnections.userId],
     references: [users.id],
-    relationName: "userApiConnections",
   }),
 }))
 
 export const dashboardsRelations = relations(dashboards, ({ one, many }) => ({
   user: one(users, {
-    fields: [dashboards.user_id],
+    fields: [dashboards.userId],
     references: [users.id],
-    relationName: "userDashboards",
   }),
-  widgets: many(dashboardWidgets, { relationName: "dashboardWidgets" }),
+  widgets: many(dashboardWidgets),
 }))
 
 export const dashboardWidgetsRelations = relations(dashboardWidgets, ({ one }) => ({
   dashboard: one(dashboards, {
-    fields: [dashboardWidgets.dashboard_id],
+    fields: [dashboardWidgets.dashboardId],
     references: [dashboards.id],
-    relationName: "dashboardWidgets",
   }),
   widgetType: one(widgetTypes, {
-    fields: [dashboardWidgets.widget_type_id],
+    fields: [dashboardWidgets.widgetTypeId],
     references: [widgetTypes.id],
-    relationName: "widgetTypeInstances",
   }),
 }))
 
 export const widgetTypesRelations = relations(widgetTypes, ({ many }) => ({
-  instances: many(dashboardWidgets, { relationName: "widgetTypeInstances" }),
+  dashboardWidgets: many(dashboardWidgets),
 }))

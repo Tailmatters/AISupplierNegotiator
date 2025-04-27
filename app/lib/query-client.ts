@@ -1,64 +1,79 @@
 "use client"
 
 import { QueryClient } from "@tanstack/react-query"
-import { useState } from "react"
 
-type FetcherOptions = {
-  on401?: "throw" | "returnNull"
-}
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
+      retry: 1,
+    },
+  },
+})
 
+type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
+
+// Custom API request function for mutations
 export async function apiRequest(
-  method: string,
-  endpoint: string,
-  body?: any,
-  customHeaders: HeadersInit = {}
-) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...customHeaders,
+  method: Method,
+  url: string,
+  data?: any,
+  options?: RequestInit
+): Promise<Response> {
+  const config: RequestInit = {
+    method,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    ...options,
   }
 
-  const options: RequestInit = { method, headers }
-  if (body) {
-    options.body = JSON.stringify(body)
+  if (data && method !== "GET") {
+    config.body = JSON.stringify(data)
   }
 
-  const response = await fetch(endpoint, options)
+  const response = await fetch(url, config)
+
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "Unknown error")
-    throw new Error(`API error ${response.status}: ${errorText}`)
+    const error = await response.json().catch(() => ({
+      message: response.statusText,
+    }))
+    throw new Error(error.message || "Something went wrong")
   }
 
   return response
 }
 
-export function getQueryFn(options: FetcherOptions = {}) {
-  return async function queryFn({ queryKey }: { queryKey: string[] }) {
-    const [endpoint] = queryKey
-    const response = await fetch(endpoint)
+// Custom query function for useQuery that handles 401s and redirects
+export const getQueryFn = <T>(options?: { on401?: "redirect" | "returnNull" }) => {
+  return async ({ queryKey }: { queryKey: string[] }): Promise<T> => {
+    const [url] = queryKey
+    const response = await fetch(url, {
+      credentials: "include",
+    })
 
-    if (response.status === 401 && options.on401 === "returnNull") {
-      return null
+    if (response.status === 401) {
+      if (options?.on401 === "redirect") {
+        window.location.href = "/auth"
+        // This will never be reached because of the redirect
+        return new Promise(() => {})
+      }
+      if (options?.on401 === "returnNull") {
+        return null as T
+      }
+      throw new Error("Unauthorized")
     }
 
     if (!response.ok) {
-      throw new Error(`API error ${response.status}: ${await response.text()}`)
+      const error = await response.json().catch(() => ({
+        message: response.statusText,
+      }))
+      throw new Error(error.message || "Something went wrong")
     }
 
-    return response.json()
+    const data = await response.json()
+    return data
   }
-}
-
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 60 * 1000, // 1 minute
-    },
-  },
-})
-
-export function useQueryClient() {
-  const [client] = useState(() => new QueryClient())
-  return client
 }
