@@ -1,92 +1,75 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
- 
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
-}
-
-export function formatNumber(number: number): string {
-  return new Intl.NumberFormat('en-US').format(number);
-}
-
 export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric', 
-    month: 'short', 
-    day: 'numeric'
-  }).format(d);
+  if (typeof date === "string") {
+    date = new Date(date)
+  }
+  
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date)
 }
 
-export function formatPercentage(value: number, decimals = 1): string {
-  return `${value.toFixed(decimals)}%`;
+export function formatCurrency(amount: number, currency = "USD"): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).format(amount)
 }
 
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength).trim()}...`;
+export function formatCompactNumber(number: number): string {
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    compactDisplay: "short",
+  }).format(number)
+}
+
+export function percentChange(current: number, previous: number): number {
+  if (previous === 0) return 0
+  return ((current - previous) / previous) * 100
+}
+
+export function truncateText(text: string, length = 100): string {
+  if (text.length <= length) return text
+  return text.slice(0, length) + "..."
+}
+
+export function calculateSavings(initialOffer: number, finalOffer: number): number {
+  if (initialOffer <= 0) return 0
+  return ((initialOffer - finalOffer) / initialOffer) * 100
 }
 
 export function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
+  if (!name) return ''
   
-  return function(...args: Parameters<T>) {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
+  const parts = name.split(' ')
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+  
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
 }
 
-export function calculateSavings(initial: number, final: number): number {
-  if (initial <= 0) return 0;
-  return ((initial - final) / initial) * 100;
-}
-
-export function calculateAverage(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, val) => sum + val, 0) / values.length;
-}
-
-export function sortByProperty<T>(array: T[], property: keyof T, direction: 'asc' | 'desc' = 'asc'): T[] {
-  return [...array].sort((a, b) => {
-    const aValue = a[property];
-    const bValue = b[property];
-    
-    if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-    if (aValue > bValue) return direction === 'asc' ? 1 : -1;
-    return 0;
-  });
-}
-
-export function groupByProperty<T>(array: T[], property: keyof T): Record<string, T[]> {
-  return array.reduce((groups, item) => {
-    const key = String(item[property]);
-    if (!groups[key]) {
-      groups[key] = [];
-    }
-    groups[key].push(item);
-    return groups;
-  }, {} as Record<string, T[]>);
-}
-
-export function generateRandomId(): string {
-  return Math.random().toString(36).substring(2, 10);
+export function generateAvatarColor(name: string): string {
+  if (!name) return '#6366F1' // Default indigo color
+  
+  // Generate a stable hash from the string
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  
+  // Convert to hex color
+  let color = '#'
+  for (let i = 0; i < 3; i++) {
+    const value = (hash >> (i * 8)) & 0xFF
+    color += ('00' + value.toString(16)).substr(-2)
+  }
+  
+  return color
 }

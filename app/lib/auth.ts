@@ -1,123 +1,184 @@
 import { db } from '@/lib/db';
-import { cookies } from 'next/headers';
 import { eq } from 'drizzle-orm';
-import { users } from '@/schema';
+import { cookies } from 'next/headers';
+import * as schema from '@/schema';
 import { scrypt, randomBytes, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 
+// Promisify the callback-based scrypt function
 const scryptAsync = promisify(scrypt);
 
-interface User {
-  id: number;
-  username: string;
-  name: string;
-  email?: string;
-  role?: string;
-  createdAt?: string;
-  password?: string;
-}
+// Session token settings
+const SESSION_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days
+const TOKEN_KEY = 'auth_token';
 
-export async function hashPassword(password: string) {
+/**
+ * Hash a password using scrypt with a random salt
+ */
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex');
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString('hex')}.${salt}`;
 }
 
-export async function comparePasswords(supplied: string, stored: string) {
+/**
+ * Compare a plaintext password with a stored hash
+ */
+export async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
   const [hashed, salt] = stored.split('.');
   const hashedBuf = Buffer.from(hashed, 'hex');
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export async function getUserByUsername(username: string): Promise<User | undefined> {
-  try {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user || undefined;
-  } catch (error) {
-    console.error('Error fetching user by username:', error);
-    return undefined;
-  }
+/**
+ * Generate a secure random session token
+ */
+function generateToken(): string {
+  return randomBytes(32).toString('hex');
 }
 
-export async function getUserById(id: number): Promise<User | undefined> {
-  try {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
-  } catch (error) {
-    console.error('Error fetching user by ID:', error);
-    return undefined;
-  }
-}
-
-export async function createUser(userData: {
-  username: string;
-  password: string;
-  name: string;
-  email?: string;
-}): Promise<User | undefined> {
-  try {
-    const hashedPassword = await hashPassword(userData.password);
-    
-    const [user] = await db
-      .insert(users)
-      .values({
-        ...userData,
-        password: hashedPassword,
-      })
-      .returning();
-    
-    return user;
-  } catch (error) {
-    console.error('Error creating user:', error);
-    return undefined;
-  }
-}
-
-export async function createSession(userId: number) {
-  const cookieStore = cookies();
-  const sessionToken = randomBytes(32).toString('hex');
+/**
+ * Get user by username
+ */
+export async function getUserByUsername(username: string): Promise<schema.User | undefined> {
+  const [user] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.username, username));
   
-  cookieStore.set({
-    name: 'session_token',
-    value: sessionToken,
+  return user;
+}
+
+/**
+ * Get user by ID
+ */
+export async function getUserById(id: number): Promise<schema.User | undefined> {
+  const [user] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, id));
+  
+  return user;
+}
+
+/**
+ * Create a new user
+ */
+export async function createUser(userData: schema.InsertUser): Promise<schema.User> {
+  const [user] = await db
+    .insert(schema.users)
+    .values(userData)
+    .returning();
+  
+  return user;
+}
+
+/**
+ * Create and store a new session for the user
+ */
+export async function createSession(user: schema.User): Promise<string> {
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + SESSION_EXPIRY);
+  
+  // In a production app, you would store the session in a database table
+  // For this example, we'll use a secure HTTP-only cookie
+  await cookies().set({
+    name: TOKEN_KEY,
+    value: token,
     httpOnly: true,
-    path: '/',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 7, // 1 week
+    expires: expiresAt,
+    path: '/',
   });
   
-  // Store session in database or memory store as needed
+  // Update the user's last login timestamp
+  await db
+    .update(schema.users)
+    .set({ last_login: new Date() })
+    .where(eq(schema.users.id, user.id));
   
-  return sessionToken;
+  return token;
 }
 
-export async function getSessionUser(): Promise<User | null> {
+/**
+ * Get the current session token from cookies
+ */
+export async function getSessionToken(): Promise<string | undefined> {
   const cookieStore = cookies();
-  const sessionToken = cookieStore.get('session_token')?.value;
+  const token = cookieStore.get(TOKEN_KEY);
+  return token?.value;
+}
+
+/**
+ * Destroy the current session
+ */
+export async function destroySession(): Promise<void> {
+  await cookies().delete(TOKEN_KEY);
+}
+
+/**
+ * Login a user with username and password
+ */
+export async function login(username: string, password: string): Promise<schema.User | null> {
+  const user = await getUserByUsername(username);
   
-  if (!sessionToken) {
+  if (!user || !(await comparePasswords(password, user.password))) {
     return null;
   }
   
-  // Retrieve user ID from session store based on token
-  // For now we'll use a placeholder user ID
-  const userId = 1; // Replace with actual lookup
-  
-  const user = await getUserById(userId);
-  return user || null;
+  await createSession(user);
+  return user;
 }
 
-export async function deleteSession() {
-  const cookieStore = cookies();
-  cookieStore.delete('session_token');
+/**
+ * Register a new user
+ */
+export async function register(userData: schema.InsertUser): Promise<schema.User | null> {
+  // Check if username already exists
+  const existingUser = await getUserByUsername(userData.username);
   
-  // Remove session from database or memory store as needed
+  if (existingUser) {
+    return null;
+  }
+  
+  // Hash the password
+  const hashedPassword = await hashPassword(userData.password);
+  
+  // Create the user with the hashed password
+  const user = await createUser({
+    ...userData,
+    password: hashedPassword,
+  });
+  
+  // Create a session for the new user
+  await createSession(user);
+  
+  return user;
 }
 
-export async function getCurrentUser() {
+/**
+ * Get the current authenticated user
+ */
+export async function getCurrentUser(): Promise<schema.User | null> {
   try {
-    return await getSessionUser();
+    // In a real application with sessions stored in a database,
+    // you would look up the session by token and find the associated user
+    // For this example, we'll simulate that by returning the user directly
+    const token = await getSessionToken();
+    
+    if (!token) {
+      return null;
+    }
+    
+    // Here, in a production app, you would validate the token
+    // For now, we'll just return a mock user to demonstrate the flow
+    const [user] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.last_login, new Date()));
+    
+    return user || null;
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;

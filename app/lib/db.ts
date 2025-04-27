@@ -1,31 +1,21 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from 'ws';
+import { WebSocket } from 'ws';
 import * as schema from '@/schema';
 
-// Enable WebSocket for Neon serverless
-neonConfig.webSocketConstructor = ws;
+// Use WebSockets for Neon serverless driver
+neonConfig.webSocketConstructor = WebSocket as any;
 
-// Check if DATABASE_URL is available
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    'DATABASE_URL environment variable not found. Please make sure it is set.'
-  );
+  throw new Error('DATABASE_URL environment variable is not set');
 }
 
 // Create a connection pool
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Create a Drizzle ORM client with our schema
+// Create a drizzle instance
 export const db = drizzle(pool, { schema });
 
-// Helper function to execute raw SQL queries
-export async function executeQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
-  try {
-    const result = await pool.query(sql, params);
-    return result.rows as T[];
-  } catch (error) {
-    console.error('Database query error:', error);
-    throw error;
-  }
-}
+// Export types for better type safety
+export type DbClient = typeof db;
+export type Schema = typeof schema;
