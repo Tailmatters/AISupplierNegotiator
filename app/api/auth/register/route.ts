@@ -1,84 +1,112 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { insertUserSchema, users } from '@/schema'
+import { users, insertUserSchema } from '@/schema'
 import { eq } from 'drizzle-orm'
-import { hashPassword, createToken } from '@/lib/auth'
+import { hashPassword, createToken, setTokenCookie } from '@/lib/auth'
 import { z } from 'zod'
 
-// Extend the insert schema with password validation
-const registerSchema = insertUserSchema.extend({
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword'],
-})
+// Registration validation schema with password confirmation
+const registerSchema = insertUserSchema
+  .extend({
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*$/,
+        'Password must contain at least one uppercase letter, one lowercase letter, and one number'
+      ),
+    passwordConfirm: z.string(),
+  })
+  .refine((data) => data.password === data.passwordConfirm, {
+    message: 'Passwords do not match',
+    path: ['passwordConfirm'],
+  })
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // Get user data from request body
-    const userData = await request.json()
+    // Parse request body
+    const body = await req.json()
     
-    // Validate input
-    const result = registerSchema.safeParse(userData)
-    
+    // Validate input data
+    const result = registerSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { message: 'Validation failed', errors: result.error.format() },
+        { error: result.error.flatten().fieldErrors },
         { status: 400 }
       )
     }
     
-    // Check if user already exists
+    // Extract validated data
+    const { passwordConfirm, ...userData } = result.data
+    
+    // Check if username already exists
     const [existingUser] = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.username, userData.username))
-      .limit(1)
     
     if (existingUser) {
       return NextResponse.json(
-        { message: 'Username already exists' },
+        { error: { username: ['Username is already taken'] } },
         { status: 400 }
       )
     }
     
     // Check if email already exists
-    const [existingEmail] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, userData.email))
-      .limit(1)
-    
-    if (existingEmail) {
-      return NextResponse.json(
-        { message: 'Email already exists' },
-        { status: 400 }
-      )
+    if (userData.email) {
+      const [existingEmail] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, userData.email))
+      
+      if (existingEmail) {
+        return NextResponse.json(
+          { error: { email: ['Email is already registered'] } },
+          { status: 400 }
+        )
+      }
     }
     
     // Hash password
     const hashedPassword = await hashPassword(userData.password)
     
-    // Create user
+    // Insert user into database
     const [user] = await db
       .insert(users)
       .values({
         ...userData,
         password: hashedPassword,
+        role: userData.role || 'buyer', // Default role if not specified
       })
       .returning()
     
-    // Create JWT token and set cookie
-    await createToken(user)
+    // Create JWT token
+    const token = await createToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    })
     
-    // Return user data (excluding password)
-    const { password: _, ...userWithoutPassword } = user
+    // Create response
+    const response = NextResponse.json({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      company: user.company,
+      position: user.position,
+      avatarUrl: user.avatarUrl,
+    })
     
-    return NextResponse.json(userWithoutPassword, { status: 201 })
+    // Set cookie with token
+    await setTokenCookie(response, token)
+    
+    return response
   } catch (error) {
     console.error('Registration error:', error)
     return NextResponse.json(
-      { message: 'Registration failed' },
+      { error: 'An unexpected error occurred during registration' },
       { status: 500 }
     )
   }

@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clearToken } from '@/lib/auth'
+import { removeTokenCookie } from '@/lib/auth'
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // Clear the JWT token from cookies
-    await clearToken()
+    // Create response with 200 status
+    const response = NextResponse.json({ success: true })
     
-    return NextResponse.json(
-      { message: 'Logged out successfully' },
-      { status: 200 }
-    )
+    // Remove auth token cookie
+    await removeTokenCookie(response)
+    
+    return response
   } catch (error) {
     console.error('Logout error:', error)
     return NextResponse.json(
-      { message: 'Logout failed' },
+      { error: 'An error occurred during logout' },
       { status: 500 }
     )
   }

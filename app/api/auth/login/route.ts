@@ -2,57 +2,81 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { users } from '@/schema'
 import { eq } from 'drizzle-orm'
-import { comparePasswords, createToken } from '@/lib/auth'
+import { comparePasswords, createToken, setTokenCookie } from '@/lib/auth'
+import { z } from 'zod'
 
-export async function POST(request: NextRequest) {
+// Login input validation schema
+const loginSchema = z.object({
+  username: z.string().min(1, 'Username is required'),
+  password: z.string().min(1, 'Password is required'),
+})
+
+export async function POST(req: NextRequest) {
   try {
-    // Get credentials from request body
-    const { username, password } = await request.json()
+    // Parse request body
+    const body = await req.json()
     
-    // Validate input
-    if (!username || !password) {
+    // Validate input data
+    const result = loginSchema.safeParse(body)
+    if (!result.success) {
       return NextResponse.json(
-        { message: 'Username and password are required' },
+        { error: result.error.flatten().fieldErrors },
         { status: 400 }
       )
     }
     
-    // Find user by username
+    const { username, password } = result.data
+    
+    // Find user in database
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.username, username))
-      .limit(1)
     
-    // Check if user exists
+    // User not found
     if (!user) {
       return NextResponse.json(
-        { message: 'Invalid username or password' },
+        { error: 'Invalid username or password' },
         { status: 401 }
       )
     }
     
     // Verify password
-    const isPasswordValid = await comparePasswords(password, user.password)
-    
-    if (!isPasswordValid) {
+    const passwordValid = await comparePasswords(password, user.password)
+    if (!passwordValid) {
       return NextResponse.json(
-        { message: 'Invalid username or password' },
+        { error: 'Invalid username or password' },
         { status: 401 }
       )
     }
     
-    // Create JWT token and set cookie
-    await createToken(user)
+    // Create JWT token
+    const token = await createToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    })
     
-    // Return user data (excluding password)
-    const { password: _, ...userWithoutPassword } = user
+    // Create response
+    const response = NextResponse.json({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      company: user.company,
+      position: user.position,
+      avatarUrl: user.avatarUrl,
+    })
     
-    return NextResponse.json(userWithoutPassword, { status: 200 })
+    // Set cookie with token
+    await setTokenCookie(response, token)
+    
+    return response
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(
-      { message: 'Authentication failed' },
+      { error: 'An unexpected error occurred' },
       { status: 500 }
     )
   }

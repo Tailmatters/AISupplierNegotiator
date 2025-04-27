@@ -1,92 +1,147 @@
-import { ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
 
 /**
- * Combines class values into a single string using clsx and tailwind-merge
+ * Combines multiple class names with Tailwind's intelligent merging
+ * to prevent class conflicts
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a number as currency 
+ * Formats a date with different options based on the provided format
  */
-export function formatCurrency(amount: number, currency = 'USD', options?: Intl.NumberFormatOptions) {
+export function formatDate(
+  date: Date | string | number,
+  format: 'short' | 'medium' | 'long' | 'relative' = 'medium'
+): string {
+  const d = new Date(date)
+  
+  // Return relative time (e.g., "5 minutes ago", "2 days ago")
+  if (format === 'relative') {
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffSecs = Math.floor(diffMs / 1000)
+    const diffMins = Math.floor(diffSecs / 60)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    const diffMonths = Math.floor(diffDays / 30)
+    const diffYears = Math.floor(diffMonths / 12)
+    
+    if (diffSecs < 60) return diffSecs + ' seconds ago'
+    if (diffMins < 60) return diffMins + ' minutes ago'
+    if (diffHours < 24) return diffHours + ' hours ago'
+    if (diffDays < 30) return diffDays + ' days ago'
+    if (diffMonths < 12) return diffMonths + ' months ago'
+    return diffYears + ' years ago'
+  }
+  
+  // Format options based on the requested format
+  const options: Intl.DateTimeFormatOptions = {
+    short: { month: 'numeric', day: 'numeric', year: '2-digit' },
+    medium: { month: 'short', day: 'numeric', year: 'numeric' },
+    long: {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    },
+  }[format]
+  
+  return new Intl.DateTimeFormat('en-US', options).format(d)
+}
+
+/**
+ * Formats a number as currency with options
+ */
+export function formatCurrency(
+  amount: number,
+  currency = 'USD',
+  options: Partial<Intl.NumberFormatOptions> = {}
+): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-    ...options
+    ...options,
   }).format(amount)
 }
 
 /**
- * Format a date with custom options
+ * Formats a number as percentage with 2 decimal places by default
  */
-export function formatDate(
-  date: Date | string | number,
-  options: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }
-) {
-  return new Intl.DateTimeFormat('en-US', options).format(
-    typeof date === 'string' || typeof date === 'number' 
-      ? new Date(date) 
-      : date
-  )
+export function formatPercentage(
+  value: number,
+  decimalPlaces = 2
+): string {
+  return `${(value * 100).toFixed(decimalPlaces)}%`
 }
 
 /**
- * Truncate text with ellipsis
+ * Truncates a string to the specified length and adds an ellipsis
  */
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return `${text.slice(0, maxLength)}...`
+export function truncateString(
+  str: string,
+  maxLength: number
+): string {
+  if (str.length <= maxLength) return str
+  return str.slice(0, maxLength) + '...'
 }
 
 /**
- * Calculate the percentage of a value from a total
- */
-export function calculatePercentage(value: number, total: number): number {
-  if (total === 0) return 0
-  return (value / total) * 100
-}
-
-/**
- * Debounce a function
+ * Creates a debounced function that delays invoking the provided function
+ * until after the specified wait time has elapsed since the last invocation
  */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
-  wait: number
+  wait = 300
 ): (...args: Parameters<T>) => void {
   let timeout: ReturnType<typeof setTimeout> | null = null
   
-  return (...args: Parameters<T>) => {
+  return function(this: any, ...args: Parameters<T>) {
+    const context = this
+    
     if (timeout) clearTimeout(timeout)
     
     timeout = setTimeout(() => {
-      func(...args)
+      timeout = null
+      func.apply(context, args)
     }, wait)
   }
 }
 
 /**
- * Convert kebab-case or snake_case to camelCase
+ * Creates a throttled function that only invokes the provided function
+ * at most once per the specified wait time
  */
-export function toCamelCase(str: string): string {
-  return str
-    .replace(/[-_](.)/g, (_, c) => c.toUpperCase())
-    .replace(/^(.)/, (_, c) => c.toLowerCase())
-}
-
-/**
- * Generate random ID
- */
-export function generateId(length = 8): string {
-  return Math.random()
-    .toString(36)
-    .substring(2, 2 + length)
+export function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  wait = 300
+): (...args: Parameters<T>) => void {
+  let waiting = false
+  let lastArgs: Parameters<T> | null = null
+  let lastThis: any = null
+  
+  return function(this: any, ...args: Parameters<T>) {
+    if (waiting) {
+      lastArgs = args
+      lastThis = this
+      return
+    }
+    
+    func.apply(this, args)
+    waiting = true
+    
+    setTimeout(() => {
+      waiting = false
+      if (lastArgs) {
+        func.apply(lastThis, lastArgs)
+        lastArgs = null
+        lastThis = null
+      }
+    }, wait)
+  }
 }

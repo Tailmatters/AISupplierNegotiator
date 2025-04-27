@@ -1,27 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
+import { getAuthToken, verifyToken } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { users } from '@/schema'
+import { eq } from 'drizzle-orm'
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    // Get the current user from the token
-    const user = await getCurrentUser()
+    // Get the auth token from cookies
+    const token = await getAuthToken(req.cookies)
     
-    if (!user) {
+    // No token found, user is not authenticated
+    if (!token) {
       return NextResponse.json(
-        { message: 'Not authenticated' },
+        { error: 'Not authenticated' },
         { status: 401 }
       )
     }
     
-    // Return user data (excluding password)
-    const { password: _, ...userWithoutPassword } = user
+    // Verify the token
+    const payload = await verifyToken(token)
     
-    return NextResponse.json(userWithoutPassword, { status: 200 })
+    // Token is invalid
+    if (!payload || !payload.userId) {
+      return NextResponse.json(
+        { error: 'Invalid authentication token' },
+        { status: 401 }
+      )
+    }
+    
+    // Get user from database
+    const [user] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        company: users.company,
+        position: users.position,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(eq(users.id, payload.userId))
+    
+    // User not found
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+    
+    // Return user data
+    return NextResponse.json(user)
   } catch (error) {
     console.error('Get user error:', error)
     return NextResponse.json(
-      { message: 'Authentication failed' },
-      { status: 401 }
+      { error: 'An error occurred while fetching user data' },
+      { status: 500 }
     )
   }
 }

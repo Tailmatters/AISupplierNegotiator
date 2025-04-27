@@ -1,150 +1,131 @@
-import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
 import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
 import { promisify } from 'util'
-import { SignJWT, jwtVerify } from 'jose'
+import { NextResponse } from 'next/server'
+import { jwtVerify, SignJWT } from 'jose'
+import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
 import { users } from '@/schema'
 import { eq } from 'drizzle-orm'
+import { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies'
 
-// Constants
-const TOKEN_NAME = 'auth-token'
-const SECRET = new TextEncoder().encode(process.env.SESSION_SECRET || 'default-secret-please-change')
-const EXPIRY = '30d' // 30 days
-
-// Convert callback-based scrypt to Promise-based
+// Convert scrypt to promise-based function
 const scryptAsync = promisify(scrypt)
 
-// Types
+// JWT secret key (use a proper env variable in production)
+export const JWT_SECRET = new TextEncoder().encode(
+  process.env.SESSION_SECRET || 'procurement-ai-platform-secret-key'
+)
+
+// Authentication token cookie name
+export const AUTH_COOKIE = 'auth-token'
+
+// Token expiration in seconds (1 day)
+export const TOKEN_EXPIRATION = 60 * 60 * 24
+
+// Define JWT payload type
 export interface JWTPayload {
   userId: number
   username: string
   role: string
 }
 
-/**
- * Hash password using scrypt with salt
- */
+// Hash a password
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex')
-  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer
-  return `${derivedKey.toString('hex')}.${salt}`
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer
+  return `${buf.toString('hex')}.${salt}`
 }
 
-/**
- * Compare password with stored hash
- */
+// Compare a password with a hashed password
 export async function comparePasswords(
-  supplied: string,
-  stored: string
+  suppliedPassword: string,
+  storedPassword: string
 ): Promise<boolean> {
-  const [hashedPassword, salt] = stored.split('.')
-  const hashedBuffer = Buffer.from(hashedPassword, 'hex')
-  const suppliedBuffer = (await scryptAsync(supplied, salt, 64)) as Buffer
-  return timingSafeEqual(hashedBuffer, suppliedBuffer)
+  const [hashedPassword, salt] = storedPassword.split('.')
+  const hashedPasswordBuf = Buffer.from(hashedPassword, 'hex')
+  const suppliedPasswordBuf = (await scryptAsync(
+    suppliedPassword,
+    salt,
+    64
+  )) as Buffer
+  return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf)
 }
 
-/**
- * Create JWT token with user data
- */
+// Create a JWT token
 export async function createToken(payload: JWTPayload): Promise<string> {
-  return await new SignJWT(payload)
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(EXPIRY)
-    .sign(SECRET)
+    .setExpirationTime(`${TOKEN_EXPIRATION}s`)
+    .sign(JWT_SECRET)
+  
+  return token
 }
 
-/**
- * Set JWT token in cookies
- */
+// Set token in cookie
 export async function setTokenCookie(
   response: NextResponse,
   token: string
 ): Promise<void> {
-  const cookieStore = cookies()
-  cookieStore.set(TOKEN_NAME, token, {
+  const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
+    maxAge: TOKEN_EXPIRATION,
     path: '/',
-  })
-}
-
-/**
- * Remove JWT token from cookies
- */
-export async function removeTokenCookie(): Promise<void> {
-  const cookieStore = cookies()
-  cookieStore.delete(TOKEN_NAME)
-}
-
-/**
- * Get JWT token from cookies or authorization header
- */
-export async function getToken(
-  req?: NextRequest
-): Promise<string | null> {
-  // Get from cookies first (server component approach)
-  const cookieStore = req ? req.cookies : cookies()
-  const tokenCookie = cookieStore.get(TOKEN_NAME)
+    sameSite: 'lax' as const,
+  }
   
-  if (tokenCookie?.value) {
-    return tokenCookie.value
-  }
-
-  // Then try the authorization header (API approach)
-  if (req?.headers) {
-    const authHeader = req.headers.get('authorization')
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      return authHeader.substring(7)
-    }
-  }
-
-  return null
+  response.cookies.set(AUTH_COOKIE, token, cookieOptions)
 }
 
-/**
- * Verify JWT token
- */
-export async function verifyToken(token: string): Promise<JWTPayload> {
-  const { payload } = await jwtVerify(token, SECRET)
-  return payload as JWTPayload
+// Remove token cookie
+export async function removeTokenCookie(
+  response: NextResponse
+): Promise<void> {
+  response.cookies.delete(AUTH_COOKIE)
 }
 
-/**
- * Get current user from token
- */
-export async function getCurrentUser(
-  req?: NextRequest
-): Promise<{ user: any | null; error?: string }> {
+// Get auth token from cookies
+export async function getAuthToken(
+  cookies: ReadonlyRequestCookies
+): Promise<string | undefined> {
+  const cookie = cookies.get(AUTH_COOKIE)
+  return cookie?.value
+}
+
+// Verify a JWT token
+export async function verifyToken(
+  token: string
+): Promise<JWTPayload | null> {
   try {
-    const token = await getToken(req)
-    
-    if (!token) {
-      return { user: null }
-    }
-    
-    const payload = await verifyToken(token)
-    
-    // Get user from database to ensure they still exist and get fresh data
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, payload.userId))
-    
-    if (!user) {
-      // User no longer exists in database
-      return { user: null, error: 'User not found' }
-    }
-    
-    // Omit password from user object
-    const { password, ...userWithoutPassword } = user
-    
-    return { user: userWithoutPassword }
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    return payload as JWTPayload
   } catch (error) {
-    console.error('Auth error:', error)
-    return { user: null, error: error.message }
+    console.error('Token verification error:', error)
+    return null
+  }
+}
+
+// Get the current user from the request
+export async function getCurrentUser(userId: number) {
+  try {
+    const [user] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        company: users.company,
+        position: users.position,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+    
+    return user || null
+  } catch (error) {
+    console.error('Get current user error:', error)
+    return null
   }
 }
