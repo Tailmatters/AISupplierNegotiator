@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .sidebar-item {
+    @apply flex items-center text-muted-foreground font-medium p-2 px-3 my-1 hover:bg-accent/50 hover:text-accent-foreground transition-colors rounded-md;
+  }
+  
+  .sidebar-item.active {
+    @apply bg-accent text-accent-foreground hover:bg-accent;
+  }
+  
+  .sidebar-icon {
+    @apply h-5 w-5 mr-2;
+  }
+}
