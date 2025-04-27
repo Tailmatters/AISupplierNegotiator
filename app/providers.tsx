@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/hooks/use-auth'
 import { ToastProvider } from '@/hooks/use-toast'
 
+// Combine all providers
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>

@@ -1,6 +1,20 @@
-import { NextRequest } from 'next/server'
-import { handleLogout } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { clearAuthCookie } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
-  return handleLogout(request)
+  try {
+    // Create response
+    const response = NextResponse.json({ success: true })
+    
+    // Clear auth cookie
+    clearAuthCookie(response)
+    
+    return response
+  } catch (error) {
+    console.error('Logout error:', error)
+    return NextResponse.json(
+      { error: 'An error occurred during logout' },
+      { status: 500 }
+    )
+  }
 }

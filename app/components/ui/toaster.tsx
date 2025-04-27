@@ -1,7 +1,5 @@
 'use client'
 
-import * as React from 'react'
-
 import {
   Toast,
   ToastClose,
@@ -11,9 +9,10 @@ import {
   ToastViewport,
 } from '@/components/ui/toast'
 import { useToast } from '@/hooks/use-toast'
+import { X } from 'lucide-react'
 
 export function Toaster() {
-  const { toasts } = useToast()
+  const { toasts, dismiss } = useToast()
 
   return (
     <ToastProvider>
@@ -27,7 +26,9 @@ export function Toaster() {
               )}
             </div>
             {action}
-            <ToastClose />
+            <ToastClose onClick={() => dismiss(id)}>
+              <X className="h-4 w-4" />
+            </ToastClose>
           </Toast>
         )
       })}

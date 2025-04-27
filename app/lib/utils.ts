@@ -1,122 +1,95 @@
+import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { type ClassValue, clsx } from 'clsx'
 
 /**
- * Combines multiple class names using clsx and tailwind-merge
- * This helps with conditional classes and avoids conflicting Tailwind classes
+ * Combines multiple class names and Tailwind classes
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date to a human-readable string
+ * Formats a date for display
  */
-export function formatDate(date: Date | string, options: Intl.DateTimeFormatOptions = {}) {
-  const defaultOptions: Intl.DateTimeFormatOptions = {
+export function formatDate(input: string | number | Date): string {
+  const date = new Date(input)
+  return date.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }
-  
-  const mergedOptions = { ...defaultOptions, ...options }
-  
-  return new Date(date).toLocaleDateString('en-US', mergedOptions)
+  })
 }
 
 /**
- * Format a currency amount
+ * Formats a currency for display
  */
-export function formatCurrency(
-  amount: number,
-  currency = 'USD',
-  locale = 'en-US'
-) {
-  return new Intl.NumberFormat(locale, {
+export function formatCurrency(amount: number, currency = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
   }).format(amount)
 }
 
 /**
- * Format a number with commas
+ * Formats a number with thousand separators
  */
-export function formatNumber(
-  num: number,
-  options: Intl.NumberFormatOptions = {}
-) {
-  return new Intl.NumberFormat('en-US', options).format(num)
+export function formatNumber(number: number): string {
+  return new Intl.NumberFormat('en-US').format(number)
 }
 
 /**
- * Truncate a string to a specific length and add ellipsis
+ * Truncates a string to a specified length
  */
-export function truncate(str: string, length: number) {
-  if (!str) return ''
-  return str.length > length ? `${str.substring(0, length)}...` : str
+export function truncate(str: string, length: number): string {
+  if (!str || str.length <= length) return str
+  return `${str.slice(0, length)}...`
 }
 
 /**
- * Safe JSON parse that returns fallback on error
+ * Capitalizes the first letter of a string
  */
-export function safeJsonParse<T>(
-  value: string,
-  fallback: T
-): T {
-  try {
-    return JSON.parse(value) as T
-  } catch (e) {
-    return fallback
-  }
+export function capitalize(str: string): string {
+  if (!str || typeof str !== 'string') return ''
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
 /**
- * Debounce a function
+ * Checks if a value is truly empty (null, undefined, empty string, empty array, empty object)
  */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | null = null
+export function isEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true
+  if (typeof value === 'string' && value.trim() === '') return true
+  if (Array.isArray(value) && value.length === 0) return true
+  if (typeof value === 'object' && Object.keys(value as object).length === 0) return true
+  return false
+}
+
+/**
+ * Deep merges two objects
+ */
+export function deepMerge<T>(target: T, source: any): T {
+  const output = { ...target }
   
-  return function(...args: Parameters<T>) {
-    const later = () => {
-      timeout = null
-      func(...args)
-    }
-    
-    if (timeout !== null) {
-      clearTimeout(timeout)
-    }
-    
-    timeout = setTimeout(later, wait)
-  }
-}
-
-/**
- * Get initials from name
- */
-export function getInitials(name: string): string {
-  if (!name) return ''
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
-}
-
-/**
- * Generate a random color based on a string (for avatars, etc.)
- */
-export function stringToColor(str: string): string {
-  if (!str) return '#6366F1' // Default indigo color
-  
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  if (isObject(target) && isObject(source)) {
+    Object.keys(source).forEach(key => {
+      if (isObject(source[key])) {
+        if (!(key in target)) {
+          Object.assign(output, { [key]: source[key] })
+        } else {
+          output[key] = deepMerge(target[key], source[key])
+        }
+      } else {
+        Object.assign(output, { [key]: source[key] })
+      }
+    })
   }
   
-  const hue = Math.abs(hash % 360)
-  return `hsl(${hue}, 70%, 50%)`
+  return output
+}
+
+/**
+ * Checks if a value is an object
+ */
+function isObject(item: any): boolean {
+  return (item && typeof item === 'object' && !Array.isArray(item))
 }

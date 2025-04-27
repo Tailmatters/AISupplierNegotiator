@@ -1,8 +1,12 @@
 'use client'
 
-import { QueryClient, QueryFunctionContext } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
 
-// Create a client
+type ApiRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+type GetQueryFnOptions = {
+  on401?: 'throw' | 'returnNull'
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -12,77 +16,44 @@ export const queryClient = new QueryClient({
   },
 })
 
-type ApiRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-/**
- * Helper function to make API requests
- */
 export async function apiRequest(
   method: ApiRequestMethod,
   url: string,
-  data?: unknown,
-  customHeaders?: Record<string, string>
-): Promise<Response> {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  }
-
-  const config: RequestInit = {
+  data?: any
+) {
+  const options: RequestInit = {
     method,
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+    },
     credentials: 'include',
   }
 
-  if (data !== undefined) {
-    config.body = JSON.stringify(data)
+  if (data) {
+    options.body = JSON.stringify(data)
   }
 
-  return fetch(url, config)
+  return fetch(url, options)
 }
 
-interface GetQueryFnOptions {
-  /**
-   * What to do when a 401 status is returned
-   * - 'throw': Throw an error (default)
-   * - 'returnNull': Return null
-   */
-  on401?: 'throw' | 'returnNull'
-}
-
-/**
- * Creates a query function for TanStack Query
- */
-export function getQueryFn<TData = unknown, TError = Error>({
-  on401 = 'throw',
-}: GetQueryFnOptions = {}) {
-  return async function queryFn({
-    queryKey: [url],
-  }: QueryFunctionContext<[string], TData>): Promise<TData> {
-    if (typeof url !== 'string') {
-      throw new Error('Invalid query key. Expected a string URL as the first element.')
-    }
-
-    const response = await apiRequest('GET', url)
+export const getQueryFn =
+  (options: GetQueryFnOptions = {}) =>
+  async ({ queryKey }: { queryKey: string[] }) => {
+    const [url] = queryKey
+    const response = await fetch(url, {
+      credentials: 'include',
+    })
 
     if (response.status === 401) {
-      if (on401 === 'returnNull') {
-        return null as TData
-      } else {
-        throw new Error('Unauthorized')
+      if (options.on401 === 'returnNull') {
+        return null
       }
+      throw new Error('Unauthorized')
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      const message = errorData.error || `API request failed with status ${response.status}`
-      throw new Error(message)
+      throw new Error(`API error: ${response.statusText}`)
     }
 
-    if (response.headers.get('content-type')?.includes('application/json')) {
-      return response.json()
-    }
-
-    return response.text() as unknown as TData
+    return response.json()
   }
-}

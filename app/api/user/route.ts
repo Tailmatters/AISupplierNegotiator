@@ -1,28 +1,23 @@
-import { NextRequest } from 'next/server'
-import { getUserFromRequest } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { getUser } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
-  const user = await getUserFromRequest(request)
-  
-  if (!user) {
-    return new Response(
-      JSON.stringify({ error: 'Unauthorized' }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
+  try {
+    const user = await getUser(request)
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      )
+    }
+    
+    return NextResponse.json(user)
+  } catch (error) {
+    console.error('Error getting user:', error)
+    return NextResponse.json(
+      { error: 'An error occurred fetching user data' },
+      { status: 500 }
     )
   }
-  
-  return new Response(
-    JSON.stringify(user),
-    {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }
-  )
 }
