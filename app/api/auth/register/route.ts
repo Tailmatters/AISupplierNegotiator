@@ -1,59 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, createUser, getUserByUsername } from '@/lib/auth';
-import { insertUserSchema } from '@/schema';
+import { register } from '@/lib/auth';
+import * as schema from '@/schema';
 import { z } from 'zod';
 
-const registerSchema = insertUserSchema.extend({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Invalid email address').optional(),
+// Create a validation schema for registration
+const registerSchema = schema.insertUserSchema.extend({
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ['confirmPassword'],
 });
 
-export async function POST(req: NextRequest) {
+type RegisterInput = z.infer<typeof registerSchema>;
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await req.json();
+    // Parse request body
+    const body = await request.json();
     
-    // Validate request body
-    const result = registerSchema.safeParse(body);
-    if (!result.success) {
+    // Validate input
+    const validationResult = registerSchema.safeParse(body);
+    
+    if (!validationResult.success) {
       return NextResponse.json(
-        { message: 'Invalid input', errors: result.error.errors },
+        { error: validationResult.error.format() },
         { status: 400 }
       );
     }
     
-    const userData = result.data;
+    const { confirmPassword, ...userData } = validationResult.data;
     
-    // Check if username already exists
-    const existingUser = await getUserByUsername(userData.username);
-    if (existingUser) {
+    // Register user
+    const user = await register(userData);
+    
+    if (!user) {
       return NextResponse.json(
-        { message: 'Username already exists' },
+        { error: 'Username already exists' },
         { status: 409 }
       );
     }
     
-    // Create new user
-    const user = await createUser(userData);
-    if (!user) {
-      return NextResponse.json(
-        { message: 'Failed to create user' },
-        { status: 500 }
-      );
-    }
-    
-    // Create session
-    await createSession(user.id);
-    
-    // Omit password from response
+    // Return the user without password
     const { password: _, ...userWithoutPassword } = user;
     
     return NextResponse.json(userWithoutPassword, { status: 201 });
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(
-      { message: 'An error occurred during registration' },
+      { error: 'An error occurred during registration' },
       { status: 500 }
     );
   }

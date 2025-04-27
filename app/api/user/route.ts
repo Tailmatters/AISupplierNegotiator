@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 
-export async function GET(_req: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const user = await getCurrentUser();
     
     if (!user) {
       return NextResponse.json(
-        { message: 'Not authenticated' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
     
-    // Omit password from response
+    // Return the user without the password
     const { password: _, ...userWithoutPassword } = user;
     
-    return NextResponse.json(userWithoutPassword);
+    return NextResponse.json(userWithoutPassword, { status: 200 });
   } catch (error) {
-    console.error('Get user error:', error);
+    console.error('User fetch error:', error);
     return NextResponse.json(
-      { message: 'An error occurred while fetching user data' },
+      { error: 'An error occurred while fetching user data' },
       { status: 500 }
     );
   }

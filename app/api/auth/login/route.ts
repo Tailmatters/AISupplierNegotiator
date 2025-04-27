@@ -1,56 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { comparePasswords, createSession, getUserByUsername } from '@/lib/auth';
-import { z } from 'zod';
+import { login } from '@/lib/auth';
 
-const loginSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
-});
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await req.json();
+    // Parse the request body
+    const body = await request.json();
+    const { username, password } = body;
     
-    // Validate request body
-    const result = loginSchema.safeParse(body);
-    if (!result.success) {
+    // Validate required fields
+    if (!username || !password) {
       return NextResponse.json(
-        { message: 'Invalid input', errors: result.error.errors },
+        { error: 'Username and password are required' },
         { status: 400 }
       );
     }
     
-    const { username, password } = result.data;
+    // Attempt to log in the user
+    const user = await login(username, password);
     
-    // Get user by username
-    const user = await getUserByUsername(username);
-    if (!user || !user.password) {
+    if (!user) {
       return NextResponse.json(
-        { message: 'Invalid username or password' },
+        { error: 'Invalid username or password' },
         { status: 401 }
       );
     }
     
-    // Compare passwords
-    const isValid = await comparePasswords(password, user.password);
-    if (!isValid) {
-      return NextResponse.json(
-        { message: 'Invalid username or password' },
-        { status: 401 }
-      );
-    }
-    
-    // Create session
-    await createSession(user.id);
-    
-    // Omit password from response
+    // Return the user without password
     const { password: _, ...userWithoutPassword } = user;
     
-    return NextResponse.json(userWithoutPassword);
+    return NextResponse.json(userWithoutPassword, { status: 200 });
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { message: 'An error occurred during login' },
+      { error: 'An error occurred during login' },
       { status: 500 }
     );
   }
