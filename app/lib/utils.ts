@@ -1,130 +1,97 @@
-import { clsx, type ClassValue } from "clsx"
+import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-
-/**
- * Utility function to merge class names.
- * Uses clsx to conditionally concatenate and tailwind-merge to handle tailwind class conflicts.
- */
-export function cn(...inputs: ClassValue[]): string {
+ 
+export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Format a date using Intl.DateTimeFormat
- * @param date Date to format
- * @param options Intl.DateTimeFormatOptions
- * @returns Formatted date string
- */
-export function formatDate(
-  date: Date | string | number,
-  options: Intl.DateTimeFormatOptions = {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }
-): string {
-  return new Intl.DateTimeFormat("en-US", {
-    ...options,
-  }).format(new Date(date))
-}
-
-/**
- * Format a number as currency
- * @param amount Amount to format
- * @param currency Currency code
- * @returns Formatted currency string
- */
-export function formatCurrency(
-  amount: number,
-  currency = "USD"
-): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
   }).format(amount)
 }
 
-/**
- * Format a number as a percentage
- * @param value Value to format (0-1)
- * @param decimals Number of decimal places
- * @returns Formatted percentage string
- */
-export function formatPercentage(
-  value: number,
-  decimals = 1
-): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "percent",
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value)
+export function formatPercentage(percentage: number): string {
+  return `${percentage.toFixed(1)}%`
 }
 
-/**
- * Truncate a string to a specified length
- * @param str String to truncate
- * @param length Maximum length
- * @returns Truncated string with ellipsis if needed
- */
-export function truncateString(str: string, length = 100): string {
-  if (str.length <= length) return str
-  return str.slice(0, length) + "..."
+export function formatDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
-/**
- * Deep clone an object
- * @param obj Object to clone
- * @returns Cloned object
- */
-export function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
-
-/**
- * Check if a value is empty (null, undefined, empty string, empty array, empty object)
- * @param value Value to check
- * @returns True if empty
- */
-export function isEmpty(value: any): boolean {
-  if (value === null || value === undefined) return true
-  if (typeof value === "string" && value.trim() === "") return true
-  if (Array.isArray(value) && value.length === 0) return true
-  if (typeof value === "object" && Object.keys(value).length === 0) return true
-  return false
-}
-
-/**
- * Filter out empty values from an object
- * @param obj Object to filter
- * @returns Filtered object
- */
-export function filterEmptyValues<T extends Record<string, any>>(obj: T): Partial<T> {
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    if (!isEmpty(value)) {
-      acc[key as keyof T] = value
+export function formatRelativeTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  
+  if (diffDays === 0) {
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    if (diffHours === 0) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60))
+      if (diffMinutes === 0) {
+        return 'just now'
+      }
+      return `${diffMinutes} ${diffMinutes === 1 ? 'minute' : 'minutes'} ago`
     }
-    return acc
-  }, {} as Partial<T>)
+    return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`
+  }
+  
+  if (diffDays < 7) {
+    return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
+  }
+  
+  return formatDate(d)
 }
 
-/**
- * Capitalize the first letter of a string
- * @param str String to capitalize
- * @returns Capitalized string
- */
-export function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1)
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength)}...`
 }
 
-/**
- * Generate a random string of specified length
- * @param length Length of the random string
- * @returns Random string
- */
-export function randomString(length = 8): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-  return Array.from({ length }, () => 
-    chars.charAt(Math.floor(Math.random() * chars.length))
-  ).join("")
+export function getRandomInt(min: number, max: number): number {
+  min = Math.ceil(min)
+  max = Math.floor(max)
+  return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+export function debounce<T extends (...args: any[]) => void>(
+  func: T, 
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+  
+  return function(...args: Parameters<T>) {
+    if (timeout) clearTimeout(timeout)
+    
+    timeout = setTimeout(() => {
+      func(...args)
+    }, wait)
+  }
+}
+
+export function convertToSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w ]+/g, '')
+    .replace(/ +/g, '-')
+}
+
+export function pluralize(count: number, singular: string, plural?: string): string {
+  return count === 1 ? singular : (plural || `${singular}s`)
+}
+
+export function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(part => part.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
 }

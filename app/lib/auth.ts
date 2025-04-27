@@ -1,180 +1,273 @@
-import { db } from "@/lib/db"
-import { createHash, randomBytes, timingSafeEqual } from "crypto"
-import { cookies } from "next/headers"
-import { NextRequest, NextResponse } from "next/server"
-import { User, insertUserSchema, users } from "@/schema"
-import { eq } from "drizzle-orm"
+import { getDb, executeQuery } from '@/lib/db'
+import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
+import { users, type User, type InsertUser } from '@/schema'
+import { and, eq } from 'drizzle-orm'
+import { promisify } from 'util'
 
-// Session constants
-const SESSION_COOKIE = "session_id"
-const SESSION_EXPIRY = 30 * 24 * 60 * 60 * 1000 // 30 days
+// Convert callback-based scrypt to promise-based
+const scryptAsync = promisify(scrypt)
 
-interface Session {
-  id: string
-  userId: number
-  expires: Date
+// Generate a JWT secret if one isn't provided
+if (!process.env.SESSION_SECRET) {
+  console.warn('Missing SESSION_SECRET environment variable. Using a random one for now.')
+  process.env.SESSION_SECRET = randomBytes(32).toString('hex')
 }
 
-// In-memory session storage (in production, use Redis or a database)
-const sessions = new Map<string, Session>()
-
-// Helper to hash passwords
+/**
+ * Hash a password using scrypt with a random salt
+ */
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex")
-  return new Promise((resolve, reject) => {
-    createHash("sha256")
-      .update(password + salt)
-      .digest("hex") + "." + salt
-      .then(resolve)
-      .catch(reject)
-  })
+  // Generate a random salt
+  const salt = randomBytes(16).toString('hex')
+  // Hash the password with the salt
+  const hash = await scryptAsync(password, salt, 64) as Buffer
+  // Join the hash and salt with a dot
+  return `${hash.toString('hex')}.${salt}`
 }
 
-// Helper to compare passwords
-export async function comparePasswords(
-  supplied: string,
-  stored: string
-): Promise<boolean> {
-  const [hashed, salt] = stored.split(".")
-  const suppliedHash = await new Promise<string>((resolve, reject) => {
-    createHash("sha256")
-      .update(supplied + salt)
-      .digest("hex")
-      .then(resolve)
-      .catch(reject)
-  })
-  
-  return timingSafeEqual(
-    Buffer.from(suppliedHash),
-    Buffer.from(hashed)
-  )
+/**
+ * Compare a plaintext password with a stored hash
+ */
+export async function comparePasswords(plaintext: string, stored: string): Promise<boolean> {
+  // Split the stored hash and salt
+  const [hash, salt] = stored.split('.')
+  // Hash the plaintext password with the stored salt
+  const hashBuffer = Buffer.from(hash, 'hex')
+  const suppliedHashBuffer = await scryptAsync(plaintext, salt, 64) as Buffer
+  // Compare the hashed passwords
+  return timingSafeEqual(hashBuffer, suppliedHashBuffer)
 }
 
-// User registration
-export async function registerUser(userData: any): Promise<User> {
-  // Parse and validate user data
-  const parsedUser = insertUserSchema.parse(userData)
+/**
+ * Create a new user
+ */
+export async function createUser(userData: Omit<InsertUser, 'password'> & { password: string }): Promise<User> {
+  // Hash the password before storing
+  const hashedPassword = await hashPassword(userData.password)
   
-  // Check if user already exists
-  const existingUser = await db.query.users.findFirst({
-    where: eq(users.username, parsedUser.username),
-  })
-  
-  if (existingUser) {
-    throw new Error("Username already exists")
-  }
-  
-  // Hash password
-  const hashedPassword = await hashPassword(parsedUser.password)
-  
-  // Insert user
-  const [user] = await db
-    .insert(users)
-    .values({
-      ...parsedUser,
-      password: hashedPassword,
-    })
-    .returning()
-  
-  return user
-}
-
-// User login
-export async function loginUser(
-  username: string,
-  password: string
-): Promise<User> {
-  // Find user
-  const user = await db.query.users.findFirst({
-    where: eq(users.username, username),
-  })
-  
-  if (!user) {
-    throw new Error("Invalid username or password")
-  }
-  
-  // Verify password
-  const isValidPassword = await comparePasswords(password, user.password)
-  
-  if (!isValidPassword) {
-    throw new Error("Invalid username or password")
-  }
-  
-  return user
-}
-
-// Create a session
-export async function createSession(
-  userId: number,
-  req: NextRequest
-): Promise<NextResponse> {
-  // Create session ID
-  const sessionId = randomBytes(32).toString("hex")
-  
-  // Set expiry
-  const expires = new Date(Date.now() + SESSION_EXPIRY)
-  
-  // Store session
-  sessions.set(sessionId, {
-    id: sessionId,
-    userId,
-    expires,
-  })
-  
-  // Set cookie
-  const cookieStore = cookies()
-  await cookieStore.set({
-    name: SESSION_COOKIE,
-    value: sessionId,
-    expires,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    sameSite: "lax",
-  })
-  
-  return NextResponse.json({ success: true })
-}
-
-// Delete a session (logout)
-export async function deleteSession(req: NextRequest): Promise<NextResponse> {
-  const cookieStore = cookies()
-  const sessionId = await cookieStore.get(SESSION_COOKIE)?.value
-  
-  if (sessionId) {
-    // Remove from storage
-    sessions.delete(sessionId)
+  // Insert the user into the database
+  return executeQuery(async (db) => {
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        ...userData,
+        password: hashedPassword
+      })
+      .returning()
     
-    // Clear cookie
-    await cookieStore.delete(SESSION_COOKIE)
-  }
-  
-  return NextResponse.json({ success: true })
+    return newUser
+  })
 }
 
-// Get current user from session
-export async function getCurrentUser(): Promise<User | null> {
-  const cookieStore = cookies()
-  const sessionId = await cookieStore.get(SESSION_COOKIE)?.value
-  
-  if (!sessionId) {
-    return null
-  }
-  
-  const session = sessions.get(sessionId)
-  
-  if (!session || session.expires < new Date()) {
-    // Session expired
-    if (session) {
-      sessions.delete(sessionId)
-    }
-    return null
-  }
-  
-  // Get user
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, session.userId),
+/**
+ * Find a user by ID
+ */
+export async function getUserById(id: number): Promise<User | undefined> {
+  return executeQuery(async (db) => {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+    
+    return user
   })
+}
+
+/**
+ * Find a user by username
+ */
+export async function getUserByUsername(username: string): Promise<User | undefined> {
+  return executeQuery(async (db) => {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username))
+    
+    return user
+  })
+}
+
+/**
+ * Authenticate a user with username and password
+ */
+export async function authenticateUser(username: string, password: string): Promise<User | null> {
+  const user = await getUserByUsername(username)
+  if (!user) return null
   
+  const isValid = await comparePasswords(password, user.password)
+  if (!isValid) return null
+  
+  return user
+}
+
+// Session cookie name
+const SESSION_COOKIE_NAME = 'app.session'
+
+// Cookie options
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 60 * 60 * 24 * 7, // 7 days
+  path: '/',
+}
+
+/**
+ * Create a session for a user
+ */
+export async function createSession(user: User, response?: NextResponse): Promise<NextResponse | void> {
+  const session = {
+    userId: user.id,
+    username: user.username,
+    name: user.name,
+    exp: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
+  }
+  
+  const sessionStr = JSON.stringify(session)
+  const cookieStore = cookies()
+  
+  if (response) {
+    // For API routes
+    response.cookies.set(SESSION_COOKIE_NAME, sessionStr, cookieOptions)
+    return response
+  } else {
+    // For server actions
+    cookieStore.set(SESSION_COOKIE_NAME, sessionStr, cookieOptions)
+  }
+}
+
+/**
+ * Get the current user session
+ */
+export async function getSession(): Promise<{ userId: number; exp: number } | null> {
+  const cookieStore = cookies()
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)
+  
+  if (!sessionCookie) return null
+  
+  try {
+    const session = JSON.parse(sessionCookie.value)
+    // Check if session is expired
+    if (session.exp < Date.now()) {
+      return null
+    }
+    return session
+  } catch (error) {
+    console.error('Error parsing session cookie:', error)
+    return null
+  }
+}
+
+/**
+ * Get the current user
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  const session = await getSession()
+  if (!session) return null
+  
+  const user = await getUserById(session.userId)
   return user || null
+}
+
+/**
+ * Clear the session
+ */
+export async function clearSession(response?: NextResponse): Promise<NextResponse | void> {
+  const cookieStore = cookies()
+  
+  if (response) {
+    // For API routes
+    response.cookies.delete(SESSION_COOKIE_NAME)
+    return response
+  } else {
+    // For server actions
+    cookieStore.delete(SESSION_COOKIE_NAME)
+  }
+}
+
+/**
+ * Handle login requests
+ */
+export async function handleLogin(request: NextRequest): Promise<NextResponse> {
+  try {
+    const data = await request.json()
+    const { username, password } = data
+    
+    // Authenticate the user
+    const user = await authenticateUser(username, password)
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Invalid username or password' }, 
+        { status: 401 }
+      )
+    }
+    
+    // Create a session
+    const response = NextResponse.json({ 
+      id: user.id, 
+      username: user.username, 
+      name: user.name,
+      role: user.role
+    })
+    return await createSession(user, response) as NextResponse
+  } catch (error) {
+    console.error('Login error:', error)
+    return NextResponse.json(
+      { error: 'An error occurred during login' }, 
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Handle registration requests
+ */
+export async function handleRegister(request: NextRequest): Promise<NextResponse> {
+  try {
+    const data = await request.json()
+    const { username, password, name, email } = data
+    
+    // Check if username already exists
+    const existingUser = await getUserByUsername(username)
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Username already exists' }, 
+        { status: 400 }
+      )
+    }
+    
+    // Create the user
+    const user = await createUser({
+      username,
+      password,
+      name,
+      email,
+      role: 'buyer', // Default role
+    })
+    
+    // Create a session
+    const response = NextResponse.json({ 
+      id: user.id, 
+      username: user.username, 
+      name: user.name,
+      role: user.role
+    }, { status: 201 })
+    return await createSession(user, response) as NextResponse
+  } catch (error) {
+    console.error('Registration error:', error)
+    return NextResponse.json(
+      { error: 'An error occurred during registration' }, 
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Handle logout requests
+ */
+export async function handleLogout(): Promise<NextResponse> {
+  const response = NextResponse.json({ success: true })
+  await clearSession(response)
+  return response
 }

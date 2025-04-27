@@ -1,96 +1,60 @@
 import { Pool, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-serverless'
-import ws from "ws"
-import * as schema from "@/schema"
+import { migrate } from 'drizzle-orm/neon-serverless/migrator'
+import ws from 'ws'
+import * as schema from '@/schema'
 
-// Configure Neon PostgreSQL client
+// Required for Neon serverless
 neonConfig.webSocketConstructor = ws
 
+// Database connection configuration
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL environment variable not set. Make sure you have a PostgreSQL database configured."
-  )
+  throw new Error('DATABASE_URL environment variable is not set')
 }
 
-// Create a connection pool
-export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL 
-})
+// Singleton pattern to ensure we only create one database connection
+let _pool: Pool | null = null
+let _db: ReturnType<typeof drizzle> | null = null
 
-// Initialize drizzle with the pool and schema
-export const db = drizzle(pool, { schema })
+export function getPool() {
+  if (!_pool) {
+    _pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  }
+  return _pool
+}
 
-// Prepare statements for common database operations
-export const dbOperations = {
-  /**
-   * Find a single record by ID
-   * @param table The table to query
-   * @param id The ID to look for
-   * @returns The found record or undefined
-   */
-  async findById<T>(table: any, id: number): Promise<T | undefined> {
-    const [record] = await db
-      .select()
-      .from(table)
-      .where(table.id.equals(id))
-      .limit(1)
-    
-    return record
-  },
+export function getDb() {
+  if (!_db) {
+    const pool = getPool()
+    _db = drizzle(pool, { schema })
+  }
+  return _db
+}
+
+// For use in server components and API routes
+export async function executeQuery<T = any>(
+  queryFn: (db: ReturnType<typeof drizzle>) => Promise<T>
+): Promise<T> {
+  const db = getDb()
+  try {
+    return await queryFn(db)
+  } catch (error) {
+    console.error('Database query failed:', error)
+    throw error
+  }
+}
+
+// This should be run in a migration script, not in the application code
+export async function runMigrations() {
+  const pool = getPool()
+  const db = drizzle(pool)
   
-  /**
-   * Find all records in a table
-   * @param table The table to query
-   * @returns Array of all records
-   */
-  async findAll<T>(table: any): Promise<T[]> {
-    return await db.select().from(table)
-  },
-  
-  /**
-   * Insert a new record
-   * @param table The table to insert into
-   * @param data The data to insert
-   * @returns The inserted record
-   */
-  async create<T>(table: any, data: any): Promise<T> {
-    const [record] = await db
-      .insert(table)
-      .values(data)
-      .returning()
-    
-    return record
-  },
-  
-  /**
-   * Update a record by ID
-   * @param table The table to update
-   * @param id The ID of the record to update
-   * @param data The data to update
-   * @returns The updated record
-   */
-  async update<T>(table: any, id: number, data: any): Promise<T | undefined> {
-    const [record] = await db
-      .update(table)
-      .set(data)
-      .where(table.id.equals(id))
-      .returning()
-    
-    return record
-  },
-  
-  /**
-   * Delete a record by ID
-   * @param table The table to delete from
-   * @param id The ID of the record to delete
-   * @returns The deleted record
-   */
-  async delete<T>(table: any, id: number): Promise<T | undefined> {
-    const [record] = await db
-      .delete(table)
-      .where(table.id.equals(id))
-      .returning()
-    
-    return record
+  try {
+    console.log('Running migrations...')
+    await migrate(db, { migrationsFolder: 'drizzle' })
+    console.log('Migrations completed successfully')
+  } catch (error) {
+    console.error('Migration failed:', error)
+    throw error
   }
 }
