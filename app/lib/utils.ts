@@ -1,4 +1,4 @@
-import { type ClassValue, clsx } from 'clsx'
+import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 /**
@@ -18,23 +18,24 @@ export function formatDate(
 ): string {
   const d = new Date(date)
   
-  // Return relative time (e.g., "5 minutes ago", "2 days ago")
   if (format === 'relative') {
     const now = new Date()
     const diffMs = now.getTime() - d.getTime()
-    const diffSecs = Math.floor(diffMs / 1000)
-    const diffMins = Math.floor(diffSecs / 60)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-    const diffMonths = Math.floor(diffDays / 30)
-    const diffYears = Math.floor(diffMonths / 12)
+    const diffSec = Math.round(diffMs / 1000)
+    const diffMin = Math.round(diffSec / 60)
+    const diffHr = Math.round(diffMin / 60)
+    const diffDays = Math.round(diffHr / 24)
+    const diffWeeks = Math.round(diffDays / 7)
+    const diffMonths = Math.round(diffDays / 30)
+    const diffYears = Math.round(diffDays / 365)
     
-    if (diffSecs < 60) return diffSecs + ' seconds ago'
-    if (diffMins < 60) return diffMins + ' minutes ago'
-    if (diffHours < 24) return diffHours + ' hours ago'
-    if (diffDays < 30) return diffDays + ' days ago'
-    if (diffMonths < 12) return diffMonths + ' months ago'
-    return diffYears + ' years ago'
+    if (diffSec < 60) return diffSec <= 1 ? 'just now' : `${diffSec} seconds ago`
+    if (diffMin < 60) return diffMin === 1 ? '1 minute ago' : `${diffMin} minutes ago`
+    if (diffHr < 24) return diffHr === 1 ? '1 hour ago' : `${diffHr} hours ago`
+    if (diffDays < 7) return diffDays === 1 ? 'yesterday' : `${diffDays} days ago`
+    if (diffWeeks < 4) return diffWeeks === 1 ? '1 week ago' : `${diffWeeks} weeks ago`
+    if (diffMonths < 12) return diffMonths === 1 ? '1 month ago' : `${diffMonths} months ago`
+    return diffYears === 1 ? '1 year ago' : `${diffYears} years ago`
   }
   
   // Format options based on the requested format

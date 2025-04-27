@@ -1,14 +1,14 @@
 import {
   Toast,
   ToastAction,
-  ToastActionElement,
   ToastClose,
   ToastDescription,
   ToastProvider,
   ToastTitle,
   ToastViewport,
+  type ToastActionElement,
   type ToastProps,
-} from "./toast"
+} from './toast'
 
 export {
   Toast,
