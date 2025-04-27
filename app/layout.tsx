@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import './globals.css';
 import { Providers } from './providers';
+import { Toaster } from '@/components/ui/toaster';
+import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Procurement AI Negotiator',
-  description: 'AI-powered procurement negotiation platform',
+  title: 'Procurement AI - AI-Powered Procurement Negotiation Platform',
+  description: 'Streamline supplier interactions with AI-driven negotiation, contract management, and analytics.',
 };
 
 export default function RootLayout({
@@ -18,7 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );
