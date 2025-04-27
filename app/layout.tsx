@@ -1,29 +1,34 @@
-import './globals.css';
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import { Providers } from './providers';
+import type { Metadata } from "next"
+import { Inter as FontSans } from "next/font/google"
+import "./globals.css"
+import { cn } from "@/lib/utils"
+import { Providers } from "./providers"
 
-const inter = Inter({ subsets: ['latin'] });
+const fontSans = FontSans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+})
 
 export const metadata: Metadata = {
-  title: 'AI Negotiator | Procurement Platform',
-  description: 'AI-powered procurement negotiation platform that streamlines supplier interactions through advanced contract management, analytics, and intelligent collaboration tools',
-};
+  title: "AI Procurement Negotiator",
+  description: "AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions",
+}
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <Providers>
-          <main className="min-h-screen">
-            {children}
-          </main>
-        </Providers>
+      <body
+        className={cn(
+          "min-h-screen bg-background font-sans antialiased",
+          fontSans.variable
+        )}
+      >
+        <Providers>{children}</Providers>
       </body>
     </html>
-  );
+  )
 }

@@ -1,143 +1,260 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 export default function Home() {
-  const router = useRouter();
-
-  // Redirect to auth page if not logged in, or dashboard if logged in
-  useEffect(() => {
-    // For now, just redirect to auth page
-    // In a more complete implementation, we would check for authentication here
-    // router.push('/auth');
-  }, [router]);
-
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Hero Section */}
-      <section className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
-        <div className="max-w-4xl mx-auto text-center space-y-8">
-          <h1 className="text-5xl md:text-6xl font-bold gradient-text mb-4">
-            AI-Powered Procurement Negotiation
-          </h1>
-          
-          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto mb-8">
-            Streamline supplier interactions through advanced contract management, analytics, 
-            and intelligent negotiation tools powered by artificial intelligence.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" className="font-medium">
-              <Link href="/auth">
-                Get Started <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-            
-            <Button asChild variant="outline" size="lg">
-              <Link href="#features">
-                Learn More
-              </Link>
-            </Button>
+      <header className="sticky top-0 z-40 border-b bg-background">
+        <div className="container flex h-16 items-center justify-between py-4">
+          <div className="flex items-center gap-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-6 w-6"
+            >
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span className="font-bold text-xl">AI Procurement</span>
           </div>
+          <nav className="flex items-center gap-6">
+            <Link 
+              href="/auth" 
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
+            >
+              Login
+            </Link>
+            <Button asChild>
+              <Link href="/auth?register=true">Get Started</Link>
+            </Button>
+          </nav>
         </div>
-      </section>
-      
-      {/* Features Section */}
-      <section id="features" className="py-16 px-4 md:px-8 bg-white dark:bg-gray-900">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12 gradient-text">
-            Key Features
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="p-6 border rounded-lg shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
+      </header>
+      <main className="flex-1">
+        <section className="w-full py-12 md:py-24 lg:py-32">
+          <div className="container px-4 md:px-6">
+            <div className="grid gap-6 lg:grid-cols-2 lg:gap-12 xl:grid-cols-2">
+              <div className="flex flex-col justify-center space-y-4">
+                <div className="space-y-2">
+                  <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none">
+                    AI-Powered Procurement Negotiation
+                  </h1>
+                  <p className="max-w-[600px] text-muted-foreground md:text-xl">
+                    Optimize supplier interactions with our intelligent platform. Analyze spend, manage negotiations, and generate contracts effortlessly.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 min-[400px]:flex-row">
+                  <Button asChild size="lg">
+                    <Link href="/dashboard">
+                      Explore Dashboard
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="lg" asChild>
+                    <Link href="/auth">
+                      Login
+                    </Link>
+                  </Button>
+                </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2">AI-Driven Negotiations</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Leverage AI to automate supplier negotiations, analyze past data, and achieve better outcomes with less manual effort.
-              </p>
-            </div>
-            
-            <div className="p-6 border rounded-lg shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+              <div className="flex items-center justify-center">
+                <div className="relative h-[350px] w-[350px] sm:h-[450px] sm:w-[450px] md:h-[550px] md:w-[550px] lg:h-[550px] lg:w-[550px]">
+                  <svg 
+                    viewBox="0 0 200 200"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="absolute inset-0 h-full w-full"
+                  >
+                    <path
+                      fill="#0070f3"
+                      d="M47.5,-57.2C59,-47.8,64.4,-30.9,67.7,-13.5C71,3.9,72.3,21.8,64.5,34.9C56.8,48,40,56.4,22.8,63.3C5.7,70.3,-11.9,75.9,-27.4,71.3C-42.9,66.7,-56.4,51.9,-65.7,34.4C-75,16.8,-80.2,-3.5,-76.1,-21.8C-72,-40.1,-58.6,-56.4,-42.7,-64.8C-26.9,-73.1,-8.5,-73.5,7.9,-71.4C24.4,-69.3,36,-66.7,47.5,-57.2Z"
+                      transform="translate(100 100)"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-white p-6 rounded-lg shadow-lg">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-blue-500"
+                          >
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                          </svg>
+                          <span className="text-lg font-bold">Spend Analysis</span>
+                        </div>
+                        <div className="h-40 w-64 rounded-md bg-gray-100 flex items-center justify-center">
+                          <span className="text-sm text-gray-500">Interactive charts and analysis tools</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2">Spend Analysis</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Comprehensive analysis of procurement spend with automated categorization and supplier consolidation opportunities.
-              </p>
-            </div>
-            
-            <div className="p-6 border rounded-lg shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Contract Management</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Generate and manage contracts automatically from negotiation outcomes, with standardized templates by category.
-              </p>
-            </div>
-            
-            <div className="p-6 border rounded-lg shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Market Analysis</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Porter's Five Forces analysis for categories to guide negotiation strategies and understand market dynamics.
-              </p>
-            </div>
-            
-            <div className="p-6 border rounded-lg shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Supplier Collaboration</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Invite suppliers to negotiate directly with the AI system, upload revised quotes, and track negotiation progress.
-              </p>
-            </div>
-            
-            <div className="p-6 border rounded-lg shadow-sm bg-white dark:bg-gray-800 dark:border-gray-700">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <svg className="h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Customizable Dashboard</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Personalized dashboard with widgets for key metrics, savings opportunities, and negotiation status tracking.
-              </p>
             </div>
           </div>
+        </section>
+
+        <section className="w-full py-12 md:py-24 lg:py-32 bg-muted">
+          <div className="container px-4 md:px-6">
+            <div className="flex flex-col items-center justify-center space-y-4 text-center">
+              <div className="space-y-2">
+                <h2 className="text-3xl font-bold tracking-tighter md:text-4xl/tight">
+                  Streamline Your Procurement Process
+                </h2>
+                <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+                  Our platform helps procurement professionals save time and reduce costs with AI-powered tools.
+                </p>
+              </div>
+            </div>
+            <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 py-12 md:grid-cols-3">
+              <div className="flex flex-col items-center space-y-2 rounded-lg p-4">
+                <div className="rounded-full bg-primary p-2 text-white">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-6 w-6"
+                  >
+                    <path d="M3 3v18h18" />
+                    <path d="m19 9-5 5-4-4-3 3" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">Advanced Analytics</h3>
+                <p className="text-center text-muted-foreground">
+                  Comprehensive spend visibility and category analysis to identify savings opportunities.
+                </p>
+              </div>
+              <div className="flex flex-col items-center space-y-2 rounded-lg p-4">
+                <div className="rounded-full bg-primary p-2 text-white">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-6 w-6"
+                  >
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">AI Negotiation</h3>
+                <p className="text-center text-muted-foreground">
+                  Let AI handle routine negotiations while you focus on strategic relationships.
+                </p>
+              </div>
+              <div className="flex flex-col items-center space-y-2 rounded-lg p-4">
+                <div className="rounded-full bg-primary p-2 text-white">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-6 w-6"
+                  >
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" x2="8" y1="13" y2="13" />
+                    <line x1="16" x2="8" y1="17" y2="17" />
+                    <line x1="10" x2="8" y1="9" y2="9" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">Contract Management</h3>
+                <p className="text-center text-muted-foreground">
+                  Automated contract generation and lifecycle management to ensure compliance.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+      <footer className="border-t">
+        <div className="container flex flex-col gap-4 py-10 md:flex-row md:gap-8 md:py-12">
+          <div className="flex-1 space-y-4">
+            <div className="flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-6 w-6"
+              >
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              <span className="font-bold">AI Procurement</span>
+            </div>
+            <p className="max-w-xs text-sm text-muted-foreground">
+              Empowering procurement professionals with AI tools for better supplier management and cost savings.
+            </p>
+          </div>
+          <div className="grid flex-1 grid-cols-2 gap-8 sm:grid-cols-3">
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Product</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Features</Link></li>
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Pricing</Link></li>
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">FAQ</Link></li>
+              </ul>
+            </div>
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Company</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">About</Link></li>
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Blog</Link></li>
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Contact</Link></li>
+              </ul>
+            </div>
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Legal</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Terms</Link></li>
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Privacy</Link></li>
+                <li><Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">Cookies</Link></li>
+              </ul>
+            </div>
+          </div>
         </div>
-      </section>
-      
-      {/* Footer */}
-      <footer className="py-8 px-4 border-t bg-gray-50 dark:bg-gray-900 dark:border-gray-800">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-gray-500 dark:text-gray-400">
-            © {new Date().getFullYear()} AI Negotiator. All rights reserved.
-          </p>
+        <div className="container py-4 text-center text-sm text-muted-foreground md:text-left">
+          <p>© {new Date().getFullYear()} AI Procurement. All rights reserved.</p>
         </div>
       </footer>
     </div>
-  );
+  )
 }

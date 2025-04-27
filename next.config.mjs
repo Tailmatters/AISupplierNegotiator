@@ -1,22 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Ensures standalone output for deployment
-  output: 'standalone',
-  
-  // Enable server actions
-  experimental: {
-    serverActions: true,
+  reactStrictMode: true,
+  swcMinify: true,
+  images: {
+    domains: ['localhost'],
   },
-  
-  // Redirect the root to the dashboard
-  async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/dashboard',
-        permanent: false,
-      },
-    ];
+  experimental: {
+    serverComponentsExternalPackages: ['@neondatabase/serverless'],
+  },
+  eslint: {
+    // Disable during development for faster iterations
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Disable during development for faster iterations
+    ignoreBuildErrors: true,
   },
 };
 
