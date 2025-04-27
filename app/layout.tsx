@@ -1,21 +1,21 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { Providers } from './providers';
-import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
+import { Toaster } from '@/components/ui/toaster';
+import { Providers } from './providers';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Procurement AI - AI-Powered Procurement Negotiation Platform',
-  description: 'Streamline supplier interactions with AI-driven negotiation, contract management, and analytics.',
+  title: 'AI Negotiator | Procurement Negotiations Platform',
+  description: 'AI-powered procurement negotiation platform that streamlines supplier interactions through advanced contract management, analytics, and intelligent collaboration tools.',
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
