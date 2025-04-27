@@ -1,35 +1,29 @@
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import * as schema from "@/schema";
+import { Pool, neonConfig } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/neon-serverless'
+import ws from 'ws'
+import * as schema from '@/schema'
+
+neonConfig.webSocketConstructor = ws
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+    "DATABASE_URL must be set. Did you forget to provision a database?"
+  )
 }
 
-let pool: Pool;
+// Create a new pool instance with the connection string
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
-if (!global.pool) {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
-  global.pool = pool;
-} else {
-  pool = global.pool;
-}
+// Create a Drizzle ORM instance with the pool and schema
+export const db = drizzle(pool, { schema })
 
-export const db = drizzle(pool, { schema });
-
-export async function query(text: string, params?: any[]) {
-  const start = Date.now();
+// Helper function to execute SQL queries
+export async function executeQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
   try {
-    const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('executed query', { text, duration, rows: res.rowCount });
-    return res;
-  } catch (err) {
-    console.error('error executing query', { text, err });
-    throw err;
+    const { rows } = await pool.query(sql, params)
+    return rows as T[]
+  } catch (error) {
+    console.error('Database query error:', error)
+    throw error
   }
 }

@@ -1,144 +1,151 @@
-import { db } from "@/lib/db";
-import { cookies } from "next/headers";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
-import { promisify } from "util";
-import * as schema from "@/schema";
-import { eq } from "drizzle-orm";
+import { db } from '@/lib/db'
+import { cookies } from 'next/headers'
+import { eq } from 'drizzle-orm'
+import { redirect } from 'next/navigation'
+import { users, type User, type InsertUser } from '@/schema'
+import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
+import { promisify } from 'util'
 
-const scryptAsync = promisify(scrypt);
+const scryptAsync = promisify(scrypt)
 
-export async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
+// Hash a password for storage
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex')
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer
+  return `${buf.toString('hex')}.${salt}`
 }
 
-export async function comparePasswords(supplied: string, stored: string) {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
+// Compare a password with a stored hash
+export async function comparePasswords(
+  suppliedPassword: string,
+  storedPassword: string
+): Promise<boolean> {
+  const [hashedPassword, salt] = storedPassword.split('.')
+  const hashedBuf = Buffer.from(hashedPassword, 'hex')
+  const suppliedBuf = (await scryptAsync(suppliedPassword, salt, 64)) as Buffer
+  return timingSafeEqual(hashedBuf, suppliedBuf)
 }
 
-export interface RegisterData {
-  username: string;
-  name: string;
-  email: string;
-  password: string;
-}
-
-export interface LoginData {
-  username: string;
-  password: string;
-}
-
-// Session management
-const SESSION_COOKIE_NAME = "ai_negotiator_session";
-
-// User authentication
-export async function register(data: RegisterData) {
+// Create a new user
+export async function createUser(userData: InsertUser): Promise<User> {
   // Check if user already exists
-  const existingUser = await getUserByUsername(data.username);
-  if (existingUser) {
-    throw new Error("Username already exists");
+  const existingUser = await db
+    .select()
+    .from(users)
+    .where(eq(users.username, userData.username))
+    .limit(1)
+
+  if (existingUser.length > 0) {
+    throw new Error('Username already exists')
   }
 
-  // Hash password
-  const hashedPassword = await hashPassword(data.password);
+  // Hash the password
+  const hashedPassword = await hashPassword(userData.password)
 
-  // Create user
-  const [user] = await db.insert(schema.users).values({
-    username: data.username,
-    password: hashedPassword,
-    name: data.name,
-    email: data.email,
-    role: "buyer", // Default role
-  }).returning();
+  // Insert the new user
+  const [user] = await db
+    .insert(users)
+    .values({
+      ...userData,
+      password: hashedPassword,
+    })
+    .returning()
 
+  return user
+}
+
+// Get a user by ID
+export async function getUserById(id: number): Promise<User | undefined> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1)
+
+  return user
+}
+
+// Get a user by username
+export async function getUserByUsername(username: string): Promise<User | undefined> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1)
+
+  return user
+}
+
+// Authenticate a user
+export async function authenticateUser(
+  username: string,
+  password: string
+): Promise<User | null> {
+  const user = await getUserByUsername(username)
+  
   if (!user) {
-    throw new Error("Failed to create user");
+    return null
   }
 
-  await createSession(user.id);
+  const isValid = await comparePasswords(password, user.password)
+  
+  if (!isValid) {
+    return null
+  }
 
-  // Return user without password
-  const { password, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+  return user
 }
 
-export async function login(data: LoginData) {
-  const user = await getUserByUsername(data.username);
-  if (!user) {
-    throw new Error("Invalid username or password");
+// Get the current user from session
+export async function getCurrentUser(): Promise<User | null> {
+  const cookieStore = cookies()
+  const userIdCookie = await cookieStore.get('userId')
+  
+  if (!userIdCookie?.value) {
+    return null
   }
-
-  const isPasswordValid = await comparePasswords(data.password, user.password);
-  if (!isPasswordValid) {
-    throw new Error("Invalid username or password");
-  }
-
-  await createSession(user.id);
-
-  // Return user without password
-  const { password, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+  
+  const userId = parseInt(userIdCookie.value, 10)
+  const user = await getUserById(userId)
+  
+  return user || null
 }
 
-export async function logout() {
-  const cookie = cookies();
-  const sessionId = cookie.get(SESSION_COOKIE_NAME)?.value;
-  
-  if (sessionId) {
-    cookie.delete(SESSION_COOKIE_NAME);
-  }
-  
-  return true;
+// Log out the current user
+export async function logoutUser(): Promise<void> {
+  const cookieStore = cookies()
+  await cookieStore.delete('userId')
 }
 
-export async function createSession(userId: number) {
-  const sessionId = randomBytes(32).toString("hex");
-  const expires = new Date();
-  expires.setDate(expires.getDate() + 7); // Session lasts 7 days
+// Create session for user
+export async function createSession(user: User): Promise<void> {
+  const cookieStore = cookies()
   
-  const cookie = cookies();
-  cookie.set(SESSION_COOKIE_NAME, sessionId, {
+  await cookieStore.set({
+    name: 'userId',
+    value: user.id.toString(),
     httpOnly: true,
-    expires,
-    path: "/",
-    sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
-  });
-  
-  return sessionId;
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 7, // 1 week
+  })
 }
 
-export async function getCurrentUser() {
-  const cookie = cookies();
-  const sessionId = cookie.get(SESSION_COOKIE_NAME)?.value;
+// Check if user is authenticated, redirect if not
+export async function requireAuth(redirectTo: string = '/auth'): Promise<User> {
+  const cookieStore = cookies()
+  const userIdCookie = await cookieStore.get('userId')
   
-  if (!sessionId) {
-    return null;
+  if (!userIdCookie?.value) {
+    redirect(redirectTo)
   }
   
-  try {
-    const user = await getUserById(1); // Replace with actual session lookup
-    if (!user) return null;
-    
-    // Return user without password
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
-  } catch (error) {
-    console.error("Error getting current user:", error);
-    return null;
+  const userId = parseInt(userIdCookie.value, 10)
+  const user = await getUserById(userId)
+  
+  if (!user) {
+    redirect(redirectTo)
   }
-}
-
-export async function getUserById(id: number) {
-  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, id));
-  return user || null;
-}
-
-export async function getUserByUsername(username: string) {
-  const [user] = await db.select().from(schema.users).where(eq(schema.users.username, username));
-  return user || null;
+  
+  return user
 }
