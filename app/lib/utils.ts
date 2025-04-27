@@ -1,84 +1,153 @@
-import { type ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
-import { formatDistanceToNow, format, parseISO } from 'date-fns'
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
 /**
- * Combines class names with Tailwind CSS
+ * Combines multiple class names and tailwind classes efficiently
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date as relative time (e.g., "2 days ago")
- */
-export function formatRelativeDate(dateString: string | Date): string {
-  const date = typeof dateString === 'string' ? new Date(dateString) : dateString
-  return formatDistanceToNow(date, { addSuffix: true })
-}
-
-/**
- * Format a date in a specific format
- */
-export function formatDate(
-  dateString: string | Date,
-  formatString: string = 'PPP'
-): string {
-  const date = typeof dateString === 'string' ? parseISO(dateString) : dateString
-  return format(date, formatString)
-}
-
-/**
- * Format a currency value
+ * Format currency with proper locale and currency symbol
  */
 export function formatCurrency(
   amount: number,
-  currency: string = 'USD',
-  locale: string = 'en-US'
+  currency = "USD",
+  locale = "en-US"
 ): string {
   return new Intl.NumberFormat(locale, {
-    style: 'currency',
+    style: "currency",
     currency,
   }).format(amount)
 }
 
 /**
- * Format a number with commas
+ * Format a date string into a human-readable format
  */
-export function formatNumber(
-  number: number,
-  locale: string = 'en-US'
+export function formatDate(
+  date: Date | string,
+  options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }
 ): string {
-  return new Intl.NumberFormat(locale).format(number)
+  const d = date instanceof Date ? date : new Date(date)
+  return new Intl.DateTimeFormat("en-US", options).format(d)
 }
 
 /**
- * Format a percentage
+ * Format a date relative to now (e.g., "2 hours ago")
  */
-export function formatPercentage(
-  value: number,
-  decimalPlaces: number = 1,
-  locale: string = 'en-US'
+export function formatRelativeTime(
+  date: Date | string | number
 ): string {
-  return new Intl.NumberFormat(locale, {
-    style: 'percent',
-    minimumFractionDigits: decimalPlaces,
-    maximumFractionDigits: decimalPlaces,
-  }).format(value / 100)
+  const d = date instanceof Date ? date : new Date(date)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
+  const diffSec = Math.round(diffMs / 1000)
+  const diffMin = Math.round(diffSec / 60)
+  const diffHr = Math.round(diffMin / 60)
+  const diffDays = Math.round(diffHr / 24)
+  const diffWeeks = Math.round(diffDays / 7)
+  const diffMonths = Math.round(diffDays / 30)
+  const diffYears = Math.round(diffDays / 365)
+  
+  if (diffSec < 60) return rtf.format(-diffSec, "second")
+  if (diffMin < 60) return rtf.format(-diffMin, "minute")
+  if (diffHr < 24) return rtf.format(-diffHr, "hour")
+  if (diffDays < 7) return rtf.format(-diffDays, "day")
+  if (diffWeeks < 4) return rtf.format(-diffWeeks, "week")
+  if (diffMonths < 12) return rtf.format(-diffMonths, "month")
+  return rtf.format(-diffYears, "year")
 }
 
 /**
- * Truncate a string to a specific length
+ * Safely truncate text with ellipsis
  */
-export function truncate(str: string, length: number): string {
-  return str.length > length ? `${str.substring(0, length)}...` : str
+export function truncateText(text: string, maxLength: number): string {
+  if (!text) return ""
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength).trim() + "..."
 }
 
 /**
- * Generate a random ID
+ * Generate random ID with specified length
  */
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9)
+export function generateId(length = 8): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+  let result = ""
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+/**
+ * Calculate percent change between two numbers
+ */
+export function percentChange(oldValue: number, newValue: number): number {
+  if (oldValue === 0) return newValue === 0 ? 0 : 100
+  return Number(((newValue - oldValue) / Math.abs(oldValue) * 100).toFixed(2))
+}
+
+/**
+ * Check if an object has all required properties
+ */
+export function hasRequiredProps<T extends object>(
+  obj: T,
+  props: (keyof T)[]
+): boolean {
+  return props.every(prop => prop in obj && obj[prop] !== undefined && obj[prop] !== null)
+}
+
+/**
+ * Deep merge two objects
+ */
+export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  const output = { ...target }
+  
+  for (const key in source) {
+    if (source[key] === undefined) continue
+    
+    if (
+      isObject(source[key]) && 
+      key in target && 
+      isObject(target[key])
+    ) {
+      output[key] = deepMerge(target[key] as object, source[key] as object) as T[Extract<keyof T, string>]
+    } else {
+      output[key] = source[key] as T[Extract<keyof T, string>]
+    }
+  }
+  
+  return output
+}
+
+function isObject(item: unknown): item is object {
+  return item !== null && typeof item === "object" && !Array.isArray(item)
+}
+
+/**
+ * Group array items by a property or function
+ */
+export function groupBy<T, K extends string | number | symbol>(
+  array: T[],
+  keyOrFn: ((item: T) => K) | keyof T
+): Record<K, T[]> {
+  const getKey = typeof keyOrFn === "function"
+    ? keyOrFn
+    : (item: T) => item[keyOrFn] as unknown as K
+  
+  return array.reduce((acc, item) => {
+    const key = getKey(item)
+    if (!acc[key]) acc[key] = []
+    acc[key].push(item)
+    return acc
+  }, {} as Record<K, T[]>)
 }
 
 /**
@@ -89,77 +158,29 @@ export function debounce<T extends (...args: any[]) => any>(
   delay: number
 ): (...args: Parameters<T>) => void {
   let timeoutId: NodeJS.Timeout
-  return function (...args: Parameters<T>) {
+  
+  return function(...args: Parameters<T>) {
     clearTimeout(timeoutId)
     timeoutId = setTimeout(() => fn(...args), delay)
   }
 }
 
 /**
- * Calculate the percentage difference between two numbers
+ * Throttle a function
  */
-export function percentageDifference(current: number, previous: number): number {
-  if (previous === 0) return current === 0 ? 0 : 100
-  return ((current - previous) / previous) * 100
-}
-
-/**
- * Group an array of objects by a key
- */
-export function groupBy<T>(array: T[], key: keyof T): Record<string, T[]> {
-  return array.reduce((result, item) => {
-    const groupKey = String(item[key])
-    if (!result[groupKey]) {
-      result[groupKey] = []
+export function throttle<T extends (...args: any[]) => any>(
+  fn: T,
+  limit: number
+): (...args: Parameters<T>) => void {
+  let inThrottle = false
+  
+  return function(...args: Parameters<T>) {
+    if (!inThrottle) {
+      fn(...args)
+      inThrottle = true
+      setTimeout(() => {
+        inThrottle = false
+      }, limit)
     }
-    result[groupKey].push(item)
-    return result
-  }, {} as Record<string, T[]>)
-}
-
-/**
- * Sort an array of objects by a key
- */
-export function sortBy<T>(
-  array: T[],
-  key: keyof T,
-  direction: 'asc' | 'desc' = 'asc'
-): T[] {
-  return [...array].sort((a, b) => {
-    const aValue = a[key]
-    const bValue = b[key]
-    
-    if (aValue === bValue) return 0
-    
-    // Handle string comparison
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      return direction === 'asc'
-        ? aValue.localeCompare(bValue)
-        : bValue.localeCompare(aValue)
-    }
-    
-    // Handle number comparison
-    if (
-      (typeof aValue === 'number' && typeof bValue === 'number') ||
-      (aValue instanceof Date && bValue instanceof Date)
-    ) {
-      return direction === 'asc'
-        ? (aValue as any) - (bValue as any)
-        : (bValue as any) - (aValue as any)
-    }
-    
-    return 0
-  })
-}
-
-/**
- * Filter undefined values from an object
- */
-export function filterUndefined<T extends object>(obj: T): Partial<T> {
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    if (value !== undefined) {
-      acc[key as keyof T] = value
-    }
-    return acc
-  }, {} as Partial<T>)
+  }
 }

@@ -1,68 +1,116 @@
-import { db } from '@/lib/db'
+import { db, users } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
-import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
-import { promisify } from 'util'
-import { users, type User, type InsertUser } from '@/schema'
-import { SignJWT, jwtVerify } from 'jose'
+import { cookies } from 'next/headers'
+import { compare, hash } from 'bcrypt'
+import { randomBytes } from 'crypto'
+import { InsertUser, User } from '@/schema'
+import * as jose from 'jose'
 
-const scryptAsync = promisify(scrypt)
-
-// Secret key for JWT signing - should be in env var
+// JWT settings
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || 'your-secret-key-change-me-for-production'
+  process.env.SESSION_SECRET || randomBytes(32).toString('hex')
 )
-
-// Token expiration time (1 day)
-const TOKEN_EXPIRATION_TIME = 60 * 60 * 24
-
-/**
- * Hash a password with salt
- */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString('hex')
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer
-  return `${buf.toString('hex')}.${salt}`
-}
-
-/**
- * Compare a password against a stored hash
- */
-export async function comparePasswords(
-  supplied: string,
-  stored: string
-): Promise<boolean> {
-  const [hashed, salt] = stored.split('.')
-  const hashedBuf = Buffer.from(hashed, 'hex')
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer
-  return timingSafeEqual(hashedBuf, suppliedBuf)
-}
+const JWT_ISSUER = 'ai-negotiator'
+const JWT_AUDIENCE = 'ai-negotiator-users'
+const JWT_EXPIRATION = '7d' // 7 days
+const TOKEN_COOKIE_NAME = 'auth_token'
 
 /**
  * Generate a JWT token for a user
  */
-export async function generateToken(user: User): Promise<string> {
-  const token = await new SignJWT({ 
-    id: user.id, 
-    username: user.username,
-    role: user.role 
-  })
+async function generateToken(user: User): Promise<string> {
+  const payload = {
+    sub: user.id.toString(),
+    name: user.name,
+    role: user.role,
+    iss: JWT_ISSUER,
+    aud: JWT_AUDIENCE,
+  }
+
+  return await new jose.SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(`${TOKEN_EXPIRATION_TIME}s`)
+    .setExpirationTime(JWT_EXPIRATION)
     .sign(JWT_SECRET)
-
-  return token
 }
 
 /**
- * Verify a JWT token
+ * Hash a password with bcrypt
  */
-export async function verifyToken(token: string) {
+export async function hashPassword(password: string): Promise<string> {
+  const saltRounds = 10
+  return await hash(password, saltRounds)
+}
+
+/**
+ * Compare a password with a hashed password
+ */
+export async function comparePassword(password: string, hashedPassword: string): Promise<boolean> {
+  return await compare(password, hashedPassword)
+}
+
+/**
+ * Register a new user
+ */
+export async function registerUser(userData: InsertUser) {
+  // Check if user with the same username already exists
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.username, userData.username),
+  })
+
+  if (existingUser) {
+    throw new Error('Username already exists')
+  }
+
+  // Hash the password
+  const hashedPassword = await hashPassword(userData.password)
+
+  // Create the user
+  const [user] = await db
+    .insert(users)
+    .values({ ...userData, password: hashedPassword })
+    .returning()
+
+  return user
+}
+
+/**
+ * Get a user by their username
+ */
+export async function getUserByUsername(username: string): Promise<User | undefined> {
+  return await db.query.users.findFirst({
+    where: eq(users.username, username),
+  })
+}
+
+/**
+ * Get the current authenticated user from the request
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  const cookieStore = cookies()
+  const token = cookieStore.get(TOKEN_COOKIE_NAME)?.value
+
+  if (!token) {
+    return null
+  }
+
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET)
-    return payload
+    const { payload } = await jose.jwtVerify(token, JWT_SECRET, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    })
+
+    if (!payload.sub) {
+      return null
+    }
+
+    const userId = parseInt(payload.sub)
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    })
+
+    return user || null
   } catch (error) {
     console.error('Token verification failed:', error)
     return null
@@ -70,192 +118,122 @@ export async function verifyToken(token: string) {
 }
 
 /**
- * Get the current user from the session cookie
+ * Handle login request
  */
-export async function getCurrentUser(): Promise<User | null> {
-  try {
-    const cookieStore = cookies()
-    const token = cookieStore.get('token')?.value
-    
-    if (!token) {
-      return null
-    }
-    
-    const payload = await verifyToken(token)
-    if (!payload || typeof payload.id !== 'number') {
-      return null
-    }
-    
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, payload.id))
-    
-    if (!user) {
-      return null
-    }
-    
-    // Exclude password from the returned user
-    const { password, ...userWithoutPassword } = user
-    return userWithoutPassword as User
-  } catch (error) {
-    console.error('Error getting current user:', error)
-    return null
+export async function handleLogin(request: Request) {
+  const body = await request.json()
+  const { username, password } = body
+
+  if (!username || !password) {
+    return NextResponse.json(
+      { error: 'Username and password are required' },
+      { status: 400 }
+    )
   }
+
+  const user = await getUserByUsername(username)
+
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Invalid username or password' },
+      { status: 401 }
+    )
+  }
+
+  const passwordMatch = await comparePassword(password, user.password)
+
+  if (!passwordMatch) {
+    return NextResponse.json(
+      { error: 'Invalid username or password' },
+      { status: 401 }
+    )
+  }
+
+  const token = await generateToken(user)
+  const response = NextResponse.json(user)
+
+  response.cookies.set({
+    name: TOKEN_COOKIE_NAME,
+    value: token,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+  })
+
+  return response
 }
 
 /**
- * Handle login requests
+ * Handle register request
  */
-export async function handleLogin(req: NextRequest) {
+export async function handleRegister(request: Request) {
+  const body = await request.json()
+
   try {
-    const body = await req.json()
-    const { username, password } = body
-    
-    if (!username || !password) {
-      return NextResponse.json(
-        { error: 'Username and password are required' },
-        { status: 400 }
-      )
-    }
-    
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username))
-    
-    if (!user || !(await comparePasswords(password, user.password))) {
-      return NextResponse.json(
-        { error: 'Invalid username or password' },
-        { status: 401 }
-      )
-    }
-    
+    const user = await registerUser(body)
     const token = await generateToken(user)
-    
-    const response = NextResponse.json(
-      {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-      },
-      { status: 200 }
-    )
-    
-    // Set the cookie
+    const response = NextResponse.json(user)
+
     response.cookies.set({
-      name: 'token',
+      name: TOKEN_COOKIE_NAME,
       value: token,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: TOKEN_EXPIRATION_TIME,
       path: '/',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     })
-    
+
     return response
   } catch (error) {
-    console.error('Login error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-/**
- * Handle register requests
- */
-export async function handleRegister(req: NextRequest) {
-  try {
-    const body = await req.json()
-    
-    // Validate required fields
-    if (!body.username || !body.password || !body.email || !body.name) {
+    if (error instanceof Error) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: error.message },
         { status: 400 }
       )
     }
     
-    // Check if username already exists
-    const existingUser = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.username, body.username))
-    
-    if (existingUser.length > 0) {
-      return NextResponse.json(
-        { error: 'Username already exists' },
-        { status: 409 }
-      )
-    }
-    
-    // Hash the password
-    const hashedPassword = await hashPassword(body.password)
-    
-    // Create the user
-    const userData: InsertUser = {
-      username: body.username,
-      password: hashedPassword,
-      email: body.email,
-      name: body.name,
-      role: body.role || 'buyer',
-      company: body.company,
-      jobTitle: body.jobTitle,
-      phone: body.phone,
-    }
-    
-    const [newUser] = await db
-      .insert(users)
-      .values(userData)
-      .returning({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-      })
-    
-    const token = await generateToken(newUser as User)
-    
-    const response = NextResponse.json(newUser, { status: 201 })
-    
-    // Set the cookie
-    response.cookies.set({
-      name: 'token',
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: TOKEN_EXPIRATION_TIME,
-      path: '/',
-    })
-    
-    return response
-  } catch (error) {
-    console.error('Registration error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Unknown error occurred' },
       { status: 500 }
     )
   }
 }
 
 /**
- * Handle logout requests
+ * Handle logout request
  */
 export async function handleLogout() {
   const response = NextResponse.json({ success: true })
   
   response.cookies.set({
-    name: 'token',
+    name: TOKEN_COOKIE_NAME,
     value: '',
     httpOnly: true,
-    expires: new Date(0),
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
     path: '/',
+    maxAge: 0,
   })
   
   return response
+}
+
+/**
+ * Authentication middleware for API routes
+ */
+export async function authMiddleware(request: NextRequest) {
+  const user = await getCurrentUser()
+  
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    )
+  }
+  
+  // You can continue with the request, attaching user information
+  return NextResponse.next()
 }

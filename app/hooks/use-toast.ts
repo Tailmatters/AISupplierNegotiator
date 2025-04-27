@@ -8,7 +8,7 @@ import type {
 } from '@/components/ui/toast'
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 1000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -26,7 +26,7 @@ const actionTypes = {
 
 let count = 0
 
-function generateId() {
+function genId() {
   count = (count + 1) % Number.MAX_SAFE_INTEGER
   return count.toString()
 }
@@ -44,11 +44,11 @@ type Action =
     }
   | {
       type: ActionType['DISMISS_TOAST']
-      toastId?: string
+      toastId?: ToasterToast['id']
     }
   | {
       type: ActionType['REMOVE_TOAST']
-      toastId?: string
+      toastId?: ToasterToast['id']
     }
 
 interface State {
@@ -92,7 +92,8 @@ export const reducer = (state: State, action: Action): State => {
     case 'DISMISS_TOAST': {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast function
+      // ! Side effects ! - This could be extracted into a dismissToast() action,
+      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId)
       } else {
@@ -127,7 +128,7 @@ export const reducer = (state: State, action: Action): State => {
   }
 }
 
-const listeners: Array<(state: State) => void> = []
+const listeners: ((state: State) => void)[] = []
 
 let memoryState: State = { toasts: [] }
 
@@ -141,7 +142,7 @@ function dispatch(action: Action) {
 type Toast = Omit<ToasterToast, 'id'>
 
 function toast({ ...props }: Toast) {
-  const id = generateId()
+  const id = genId()
 
   const update = (props: ToasterToast) =>
     dispatch({

@@ -2,14 +2,31 @@
 
 import { QueryClient } from '@tanstack/react-query'
 
-export type ApiRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-export type FetchOptions = {
-  on401?: 'throw' | 'returnNull'
-  headers?: Record<string, string>
+type ApiErrorResponse = {
+  error: string
 }
 
-// Create a new QueryClient instance to be used across the app
+type ApiRequestInit = Omit<RequestInit, 'body'> & {
+  body?: unknown
+}
+
+type QueryFnOptions = {
+  on401?: 'throw' | 'returnNull'
+  signal?: AbortSignal
+}
+
+export class ApiError extends Error {
+  status: number
+  data: ApiErrorResponse | null
+
+  constructor(message: string, status: number, data: ApiErrorResponse | null = null) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -22,74 +39,99 @@ export const queryClient = new QueryClient({
 })
 
 /**
- * Helper function to make API requests
- * @param method The HTTP method to use
- * @param url The URL to make the request to
- * @param data The data to send with the request
- * @param customHeaders Additional headers to include with the request
- * @returns The fetch response
+ * Make an API request with proper error handling
  */
 export async function apiRequest(
-  method: ApiRequestMethod,
-  url: string,
-  data?: any,
-  customHeaders?: Record<string, string>
+  method: string,
+  endpoint: string,
+  body?: unknown,
+  init?: RequestInit
 ): Promise<Response> {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  }
-
   const options: RequestInit = {
     method,
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
     credentials: 'include',
+    ...init,
   }
 
-  if (data && method !== 'GET') {
-    options.body = JSON.stringify(data)
+  if (body) {
+    options.body = JSON.stringify(body)
   }
 
-  return fetch(url, options)
+  const response = await fetch(endpoint, options)
+
+  if (!response.ok) {
+    let errorData: ApiErrorResponse | null = null
+    try {
+      errorData = await response.json()
+    } catch (e) {
+      // Response wasn't JSON, continue with default error message
+    }
+
+    const message = errorData?.error || `API request failed with status ${response.status}`
+    throw new ApiError(message, response.status, errorData)
+  }
+
+  return response
 }
 
 /**
- * Helper function to get a query function for TanStack Query
- * @param options Options for the query function
- * @returns A query function that can be used with useQuery
+ * Create a query function for TanStack Query
  */
-export function getQueryFn<T = any>(options?: FetchOptions) {
-  return async ({ queryKey }: { queryKey: string[] }): Promise<T> => {
+export function getQueryFn<T>({ on401 = 'throw', signal }: QueryFnOptions = {}) {
+  return async ({ queryKey }: { queryKey: string[] }): Promise<T | undefined> => {
     const [endpoint] = queryKey
+    
     try {
-      const response = await fetch(endpoint, {
-        credentials: 'include',
-        headers: options?.headers,
-      })
-
-      if (!response.ok) {
-        if (response.status === 401 && options?.on401 === 'returnNull') {
-          return null as T
-        }
-        
-        const errorData = await response.json().catch(() => ({
-          message: response.statusText,
-        }))
-        
-        throw new Error(
-          errorData.message || errorData.error || 'An error occurred'
-        )
-      }
-
-      // For empty responses like 204 No Content
+      const response = await apiRequest('GET', endpoint, undefined, { signal })
+      
       if (response.status === 204) {
-        return null as T
+        return undefined
       }
-
-      return response.json()
+      
+      return await response.json()
     } catch (error) {
-      console.error(`Error fetching ${endpoint}:`, error)
+      if (error instanceof ApiError && error.status === 401 && on401 === 'returnNull') {
+        return undefined
+      }
       throw error
     }
+  }
+}
+
+/**
+ * Optimistic update helper for mutations
+ */
+export function optimisticUpdate<T>(
+  queryKey: string | string[],
+  updateFn: (oldData: T) => T
+) {
+  const key = Array.isArray(queryKey) ? queryKey : [queryKey]
+  
+  return {
+    onMutate: async (newData: unknown) => {
+      await queryClient.cancelQueries({ queryKey: key })
+      const previousData = queryClient.getQueryData<T>(key)
+      
+      if (previousData) {
+        queryClient.setQueryData<T>(key, (oldData) => {
+          if (!oldData) return previousData
+          return updateFn(oldData)
+        })
+      }
+      
+      return { previousData }
+    },
+    onError: (_err: unknown, _newData: unknown, context: { previousData?: T }) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(key, context.previousData)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: key })
+    },
   }
 }
