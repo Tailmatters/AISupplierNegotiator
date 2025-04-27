@@ -1,18 +1,21 @@
-import { clsx, type ClassValue } from 'clsx'
+import { ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 /**
- * Merges multiple class names and Tailwind CSS classes efficiently
+ * Combine multiple class names with tailwind-merge
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date string in a consistent way
+ * Format a date to a readable string
  */
 export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString('en-US', {
+  if (!date) return ''
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  return dateObj.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -20,88 +23,138 @@ export function formatDate(date: Date | string): string {
 }
 
 /**
- * Format currency amount with proper currency symbol and decimal places
+ * Format a datetime to a readable string
  */
-export function formatCurrency(amount: number | string, currency: string = 'USD'): string {
-  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
+export function formatDateTime(date: Date | string): string {
+  if (!date) return ''
   
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  return dateObj.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+  })
+}
+
+/**
+ * Format a currency value
+ */
+export function formatCurrency(amount: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-  }).format(numAmount)
+  }).format(amount)
 }
 
 /**
- * Format a number with commas for thousands separators
+ * Format a percentage value
  */
-export function formatNumber(num: number | string): string {
-  const numValue = typeof num === 'string' ? parseFloat(num) : num
-  
-  return new Intl.NumberFormat('en-US').format(numValue)
+export function formatPercentage(value: number, digits = 2): string {
+  return `${value.toFixed(digits)}%`
 }
 
 /**
- * Truncate text to a certain length with ellipsis
+ * Truncate text to a specific length
  */
-export function truncateText(text: string, maxLength: number = 100): string {
-  if (text.length <= maxLength) return text
-  
+export function truncateText(text: string, maxLength: number): string {
+  if (!text || text.length <= maxLength) return text || ''
   return `${text.slice(0, maxLength)}...`
 }
 
 /**
- * Generate a random string of specified length
+ * Generate a random ID
  */
-export function generateRandomString(length: number = 10): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
+export function generateId(): string {
+  return Math.random().toString(36).substring(2, 15)
+}
+
+/**
+ * Deep merge two objects
+ */
+export function deepMerge<T>(target: T, source: Partial<T>): T {
+  const output = { ...target }
   
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  if (isObject(target) && isObject(source)) {
+    Object.keys(source).forEach(key => {
+      if (isObject(source[key as keyof Partial<T>])) {
+        if (!(key in target)) {
+          Object.assign(output, { [key]: source[key as keyof Partial<T>] })
+        } else {
+          output[key as keyof T] = deepMerge(
+            target[key as keyof T],
+            source[key as keyof Partial<T>] as any
+          )
+        }
+      } else {
+        Object.assign(output, { [key]: source[key as keyof Partial<T>] })
+      }
+    })
   }
   
-  return result
+  return output
 }
 
 /**
- * Check if an email is valid
+ * Check if value is an object
  */
-export function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
+function isObject(item: any): boolean {
+  return item && typeof item === 'object' && !Array.isArray(item)
 }
 
 /**
- * Capitalize the first letter of each word in a string
+ * Group data by key
  */
-export function capitalizeWords(str: string): string {
-  return str
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
+export function groupBy<T>(data: T[], key: keyof T): Record<string, T[]> {
+  return data.reduce((acc, item) => {
+    const groupKey = String(item[key])
+    if (!acc[groupKey]) {
+      acc[groupKey] = []
+    }
+    acc[groupKey].push(item)
+    return acc
+  }, {} as Record<string, T[]>)
 }
 
 /**
- * Deep clone an object
+ * Calculate savings percentage
  */
-export function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
+export function calculateSavingsPercentage(original: number, final: number): number {
+  if (original === 0) return 0
+  return ((original - final) / original) * 100
 }
 
 /**
- * Delay execution for a specified number of milliseconds
+ * Sleep for a given time
  */
-export function delay(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**
- * Get initials from a name (e.g., "John Doe" -> "JD")
+ * Retry a function with exponential backoff
  */
-export function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map(part => part.charAt(0))
-    .join('')
-    .toUpperCase()
+export async function retry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  delay = 1000
+): Promise<T> {
+  let retries = 0
+  let lastError: any
+  
+  while (retries <= maxRetries) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      retries++
+      
+      if (retries > maxRetries) break
+      
+      await sleep(delay * Math.pow(2, retries - 1))
+    }
+  }
+  
+  throw lastError
 }
