@@ -1,55 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { register } from '@/lib/auth';
-import * as schema from '@/schema';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { register } from "@/lib/auth";
+import { z } from "zod";
 
-// Create a validation schema for registration
-const registerSchema = schema.insertUserSchema.extend({
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
+const registerSchema = z.object({
+  username: z.string().min(3).max(50),
+  name: z.string().min(2).max(100),
+  email: z.string().email(),
+  password: z.string().min(8),
 });
 
-type RegisterInput = z.infer<typeof registerSchema>;
-
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(request: Request) {
   try {
-    // Parse request body
     const body = await request.json();
     
-    // Validate input
-    const validationResult = registerSchema.safeParse(body);
-    
-    if (!validationResult.success) {
+    // Validate request body
+    const result = registerSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: validationResult.error.format() },
+        { message: "Invalid request data", errors: result.error.flatten() },
         { status: 400 }
       );
     }
     
-    const { confirmPassword, ...userData } = validationResult.data;
-    
-    // Register user
-    const user = await register(userData);
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Username already exists' },
-        { status: 409 }
-      );
-    }
-    
-    // Return the user without password
-    const { password: _, ...userWithoutPassword } = user;
-    
-    return NextResponse.json(userWithoutPassword, { status: 201 });
-  } catch (error) {
-    console.error('Registration error:', error);
+    const user = await register(result.data);
+    return NextResponse.json(user, { status: 201 });
+  } catch (error: any) {
+    console.error("Register error:", error);
     return NextResponse.json(
-      { error: 'An error occurred during registration' },
-      { status: 500 }
+      { message: error.message || "Registration failed" },
+      { status: 400 }
     );
   }
 }

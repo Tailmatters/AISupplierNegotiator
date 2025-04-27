@@ -1,39 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { login } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { login } from "@/lib/auth";
+import { z } from "zod";
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+const loginSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+});
+
+export async function POST(request: Request) {
   try {
-    // Parse the request body
     const body = await request.json();
-    const { username, password } = body;
     
-    // Validate required fields
-    if (!username || !password) {
+    // Validate request body
+    const result = loginSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: 'Username and password are required' },
+        { message: "Invalid request data", errors: result.error.flatten() },
         { status: 400 }
       );
     }
     
-    // Attempt to log in the user
-    const user = await login(username, password);
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid username or password' },
-        { status: 401 }
-      );
-    }
-    
-    // Return the user without password
-    const { password: _, ...userWithoutPassword } = user;
-    
-    return NextResponse.json(userWithoutPassword, { status: 200 });
-  } catch (error) {
-    console.error('Login error:', error);
+    const user = await login(result.data);
+    return NextResponse.json(user, { status: 200 });
+  } catch (error: any) {
+    console.error("Login error:", error);
     return NextResponse.json(
-      { error: 'An error occurred during login' },
-      { status: 500 }
+      { message: error.message || "Login failed" },
+      { status: 401 }
     );
   }
 }

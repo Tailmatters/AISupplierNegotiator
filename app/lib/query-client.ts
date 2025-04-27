@@ -27,11 +27,11 @@ export const queryClient = new QueryClient({
   },
 })
 
-export const QueryClientProvider = ({ 
+export function QueryClientProvider({ 
   children 
 }: { 
   children: React.ReactNode 
-}) => {
+}) {
   return (
     <TanStackQueryClientProvider client={queryClient}>
       {children}

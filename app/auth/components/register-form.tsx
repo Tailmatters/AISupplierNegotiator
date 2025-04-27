@@ -1,53 +1,49 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
-import { z } from "zod";
-import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { Button } from "@/components/ui/button"
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { useForm } from "react-hook-form";
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { useAuth } from "@/hooks/use-auth"
+import { Loader2 } from "lucide-react"
 
 const registerSchema = z.object({
-  username: z.string().min(3, {
-    message: "Username must be at least 3 characters.",
-  }),
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  password: z.string().min(8, {
-    message: "Password must be at least 8 characters.",
-  }),
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(50, "Username must be no more than 50 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  name: z.string()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name must be no more than 100 characters"),
+  email: z.string()
+    .email("Please enter a valid email address"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number"),
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
+}).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
 });
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
+type RegisterFormValues = z.infer<typeof registerSchema>
 
-export function RegisterForm() {
-  const { register } = useAuth();
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-
+export default function RegisterForm() {
+  const { registerMutation } = useAuth()
+  const [showPassword, setShowPassword] = useState(false)
+  
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -57,29 +53,16 @@ export function RegisterForm() {
       password: "",
       confirmPassword: "",
     },
-  });
+  })
 
-  const onSubmit = async (data: RegisterFormValues) => {
-    try {
-      setIsLoading(true);
-      const success = await register(data);
-      if (success) {
-        router.push("/");
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to register",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  async function onSubmit(data: RegisterFormValues) {
+    const { confirmPassword, ...registerData } = data
+    registerMutation.mutate(registerData)
+  }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="username"
@@ -88,15 +71,17 @@ export function RegisterForm() {
               <FormLabel>Username</FormLabel>
               <FormControl>
                 <Input 
-                  placeholder="Enter a unique username" 
+                  placeholder="Your username" 
                   {...field} 
-                  disabled={isLoading}
+                  autoComplete="username"
+                  disabled={registerMutation.isPending}
                 />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
+        
         <FormField
           control={form.control}
           name="name"
@@ -105,15 +90,17 @@ export function RegisterForm() {
               <FormLabel>Full Name</FormLabel>
               <FormControl>
                 <Input 
-                  placeholder="Enter your full name" 
+                  placeholder="Your full name" 
                   {...field} 
-                  disabled={isLoading}
+                  autoComplete="name"
+                  disabled={registerMutation.isPending}
                 />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
+        
         <FormField
           control={form.control}
           name="email"
@@ -123,18 +110,17 @@ export function RegisterForm() {
               <FormControl>
                 <Input 
                   type="email"
-                  placeholder="Enter your email address" 
+                  placeholder="Your email address" 
                   {...field} 
-                  disabled={isLoading}
+                  autoComplete="email"
+                  disabled={registerMutation.isPending}
                 />
               </FormControl>
-              <FormDescription>
-                We'll never share your email with anyone else.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
+        
         <FormField
           control={form.control}
           name="password"
@@ -142,20 +128,31 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Create a password"
-                  {...field}
-                  disabled={isLoading}
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Create a password"
+                    {...field}
+                    autoComplete="new-password"
+                    disabled={registerMutation.isPending}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={registerMutation.isPending}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </Button>
+                </div>
               </FormControl>
-              <FormDescription>
-                Must be at least 8 characters long.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
+        
         <FormField
           control={form.control}
           name="confirmPassword"
@@ -164,31 +161,29 @@ export function RegisterForm() {
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
                 <Input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Confirm your password"
                   {...field}
-                  disabled={isLoading}
+                  autoComplete="new-password"
+                  disabled={registerMutation.isPending}
                 />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={isLoading}
-        >
-          {isLoading ? (
+        
+        <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
+          {registerMutation.isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
-              Creating Account...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating account...
             </>
           ) : (
-            "Create Account"
+            "Register"
           )}
         </Button>
       </form>
     </Form>
-  );
+  )
 }

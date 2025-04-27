@@ -1,14 +1,10 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
-import { z } from "zod";
-import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { Button } from "@/components/ui/button"
 import {
   Form,
   FormControl,
@@ -16,52 +12,37 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { useForm } from "react-hook-form";
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { useAuth } from "@/hooks/use-auth"
+import { Loader2 } from "lucide-react"
 
 const loginSchema = z.object({
-  username: z.string().min(1, { message: "Username is required" }),
-  password: z.string().min(1, { message: "Password is required" }),
-});
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+})
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type LoginFormValues = z.infer<typeof loginSchema>
 
-export function LoginForm() {
-  const { login } = useAuth();
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-
+export default function LoginForm() {
+  const { loginMutation } = useAuth()
+  const [showPassword, setShowPassword] = useState(false)
+  
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       username: "",
       password: "",
     },
-  });
+  })
 
-  const onSubmit = async (data: LoginFormValues) => {
-    try {
-      setIsLoading(true);
-      const success = await login(data);
-      if (success) {
-        router.push("/");
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to login",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  async function onSubmit(data: LoginFormValues) {
+    loginMutation.mutate(data)
+  }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="username"
@@ -70,15 +51,17 @@ export function LoginForm() {
               <FormLabel>Username</FormLabel>
               <FormControl>
                 <Input 
-                  placeholder="Enter your username" 
+                  placeholder="Your username" 
                   {...field} 
-                  disabled={isLoading}
+                  autoComplete="username"
+                  disabled={loginMutation.isPending}
                 />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
+        
         <FormField
           control={form.control}
           name="password"
@@ -86,32 +69,42 @@ export function LoginForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Enter your password"
-                  {...field}
-                  disabled={isLoading}
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Your password"
+                    {...field}
+                    autoComplete="current-password"
+                    disabled={loginMutation.isPending}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={loginMutation.isPending}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </Button>
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={isLoading}
-        >
-          {isLoading ? (
+        
+        <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+          {loginMutation.isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Logging in...
             </>
           ) : (
-            "Sign In"
+            "Log in"
           )}
         </Button>
       </form>
     </Form>
-  );
+  )
 }
