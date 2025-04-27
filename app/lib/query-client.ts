@@ -1,68 +1,71 @@
-'use client'
-
 import { QueryClient } from '@tanstack/react-query'
 
+// Create a client
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60 * 1000, // 1 minute
+      retry: 1,
       refetchOnWindowFocus: false,
     },
   },
 })
 
-export type FetcherOptions = {
-  on401?: 'redirect' | 'throw' | 'returnNull'
-  customHeaders?: Record<string, string>
+// Custom fetch options for API requests
+interface FetchOptions {
+  on401?: 'returnNull' | 'throw'
 }
 
-// Default fetcher for React Query
-export const getQueryFn = (options: FetcherOptions = {}) => {
-  return async function queryFn<T>({ queryKey }: { queryKey: string[] }): Promise<T> {
+// Generic fetch function for the API
+export function getQueryFn({ on401 = 'throw' }: FetchOptions = {}) {
+  return async ({ queryKey }: { queryKey: string[] }) => {
     const [endpoint] = queryKey
-    const res = await apiRequest('GET', endpoint, undefined, options)
     
-    if (res.status === 401) {
-      if (options.on401 === 'redirect') {
-        window.location.href = '/auth'
-        return new Promise(() => {}) as Promise<T> // Never resolves
-      } else if (options.on401 === 'returnNull') {
-        return null as unknown as T
-      } else {
-        throw new Error('Unauthorized')
+    const response = await fetch(endpoint, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    })
+    
+    if (response.status === 401) {
+      if (on401 === 'returnNull') {
+        return null
       }
+      throw new Error('Unauthorized')
     }
     
-    if (!res.ok) {
-      const error = await res.text().catch(() => 'Unknown error')
-      throw new Error(error)
+    if (!response.ok) {
+      throw new Error('An error occurred while fetching the data.')
     }
     
-    return res.json() as Promise<T>
+    return response.json()
   }
 }
 
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
+// Function to make API requests
 export async function apiRequest(
-  method: Method,
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   endpoint: string,
-  data?: any,
-  options: FetcherOptions = {}
+  data?: unknown
 ) {
-  const url = endpoint.startsWith('http') ? endpoint : endpoint
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options.customHeaders,
-  }
-  
-  const config: RequestInit = {
+  const options: RequestInit = {
     method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: 'include', // Important for cookies
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
   }
   
-  return fetch(url, config)
+  if (data) {
+    options.body = JSON.stringify(data)
+  }
+  
+  try {
+    const response = await fetch(endpoint, options)
+    return response
+  } catch (error) {
+    console.error(`API request error (${method} ${endpoint}):`, error)
+    throw error
+  }
 }
