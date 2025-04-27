@@ -1,14 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
-import { logoutUser } from "@/lib/auth";
+import { NextRequest, NextResponse } from 'next/server';
+import { deleteSession } from '@/lib/auth';
 
-export async function POST() {
+export async function POST(_req: NextRequest) {
   try {
-    await logoutUser();
-    return NextResponse.json({ success: true });
+    await deleteSession();
+    return NextResponse.json({ message: 'Logged out successfully' });
   } catch (error) {
-    console.error("Logout error:", error);
+    console.error('Logout error:', error);
     return NextResponse.json(
-      { error: "Logout failed" },
+      { message: 'An error occurred during logout' },
       { status: 500 }
     );
   }

@@ -2,87 +2,79 @@
 
 import { QueryClient } from '@tanstack/react-query';
 
+type FetcherOptions = {
+  on401?: 'redirect' | 'returnNull' | 'throw';
+};
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
-      retry: false,
+      staleTime: 60 * 1000, // 1 minute
+      retry: 1,
     },
   },
 });
 
-interface RequestOptions {
-  headers?: Record<string, string>;
-  signal?: AbortSignal;
-}
+export const getQueryFn =
+  (options?: FetcherOptions) =>
+  async ({ queryKey }: { queryKey: string[] }): Promise<any> => {
+    const [path] = queryKey;
+    
+    try {
+      const response = await fetch(path, {
+        credentials: 'include',
+      });
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+      if (response.status === 401) {
+        if (options?.on401 === 'returnNull') {
+          return null;
+        } else if (options?.on401 === 'redirect' && typeof window !== 'undefined') {
+          window.location.href = '/auth';
+          return null;
+        } else {
+          throw new Error('Not authenticated');
+        }
+      }
 
-export async function apiRequest(
-  method: HttpMethod,
-  url: string,
-  data?: unknown,
-  options: RequestOptions = {}
-) {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({
+          message: 'An error occurred',
+        }));
+        throw new Error(error.message || 'An error occurred');
+      }
 
-  const config: RequestInit = {
-    method,
-    headers,
-    credentials: 'include',
-    body: data ? JSON.stringify(data) : undefined,
-    signal: options.signal,
-  };
-
-  try {
-    const response = await fetch(url, config);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || `API request failed with status ${response.status}`
-      );
-    }
-
-    return response;
-  } catch (error) {
-    if (error instanceof Error) {
+      return response.json();
+    } catch (error: any) {
+      console.error('Query error:', error);
       throw error;
     }
-    throw new Error('Unknown error occurred during API request');
-  }
-}
-
-interface QueryFnOptions {
-  on401?: 'throw' | 'returnNull';
-}
-
-export function getQueryFn({ on401 = 'throw' }: QueryFnOptions = {}) {
-  return async ({ queryKey }: { queryKey: string[] }) => {
-    const path = queryKey[0];
-    const response = await fetch(path, {
-      credentials: 'include',
-    });
-
-    if (response.status === 401 && on401 === 'returnNull') {
-      return null;
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || `API request failed with status ${response.status}`
-      );
-    }
-
-    // For empty responses
-    if (response.status === 204) {
-      return null;
-    }
-
-    return response.json();
   };
+
+export async function apiRequest(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  url: string,
+  data?: any
+): Promise<Response> {
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+  };
+
+  if (data && method !== 'GET') {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({
+      message: `${response.status} ${response.statusText}`,
+    }));
+    throw new Error(error.message || 'An error occurred');
+  }
+
+  return response;
 }

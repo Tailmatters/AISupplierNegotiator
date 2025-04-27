@@ -1,55 +1,56 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getUserByUsername, comparePasswords, setSessionCookie } from "@/lib/auth";
-import { z } from "zod";
+import { NextRequest, NextResponse } from 'next/server';
+import { comparePasswords, createSession, getUserByUsername } from '@/lib/auth';
+import { z } from 'zod';
 
 const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
+  username: z.string().min(1, 'Username is required'),
+  password: z.string().min(1, 'Password is required'),
 });
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await req.json();
     
-    const validatedFields = loginSchema.safeParse(body);
-    if (!validatedFields.success) {
+    // Validate request body
+    const result = loginSchema.safeParse(body);
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Invalid input", details: validatedFields.error.errors },
+        { message: 'Invalid input', errors: result.error.errors },
         { status: 400 }
       );
     }
     
-    const { username, password } = validatedFields.data;
+    const { username, password } = result.data;
     
+    // Get user by username
     const user = await getUserByUsername(username);
-    if (!user) {
+    if (!user || !user.password) {
       return NextResponse.json(
-        { error: "Invalid username or password" },
+        { message: 'Invalid username or password' },
         { status: 401 }
       );
     }
     
-    const isPasswordValid = await comparePasswords(password, user.password);
-    if (!isPasswordValid) {
+    // Compare passwords
+    const isValid = await comparePasswords(password, user.password);
+    if (!isValid) {
       return NextResponse.json(
-        { error: "Invalid username or password" },
+        { message: 'Invalid username or password' },
         { status: 401 }
       );
     }
     
-    await setSessionCookie(user.id);
+    // Create session
+    await createSession(user.id);
     
-    return NextResponse.json({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
+    // Omit password from response
+    const { password: _, ...userWithoutPassword } = user;
+    
+    return NextResponse.json(userWithoutPassword);
   } catch (error) {
-    console.error("Login error:", error);
+    console.error('Login error:', error);
     return NextResponse.json(
-      { error: "Authentication failed" },
+      { message: 'An error occurred during login' },
       { status: 500 }
     );
   }

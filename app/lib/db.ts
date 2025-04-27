@@ -3,31 +3,29 @@ import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from 'ws';
 import * as schema from '@/schema';
 
+// Enable WebSocket for Neon serverless
 neonConfig.webSocketConstructor = ws;
 
+// Check if DATABASE_URL is available
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    'DATABASE_URL must be set. Did you forget to provision a database?',
+    'DATABASE_URL environment variable not found. Please make sure it is set.'
   );
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+// Create a connection pool
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Helper function for transactions
-export async function withTransaction<T>(
-  callback: (tx: typeof db) => Promise<T>,
-): Promise<T> {
-  return await pool.connect(async (connection) => {
-    const tx = drizzle(connection, { schema });
-    await connection.query('BEGIN');
-    try {
-      const result = await callback(tx);
-      await connection.query('COMMIT');
-      return result;
-    } catch (e) {
-      await connection.query('ROLLBACK');
-      throw e;
-    }
-  });
+// Create a Drizzle ORM client with our schema
+export const db = drizzle(pool, { schema });
+
+// Helper function to execute raw SQL queries
+export async function executeQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
+  try {
+    const result = await pool.query(sql, params);
+    return result.rows as T[];
+  } catch (error) {
+    console.error('Database query error:', error);
+    throw error;
+  }
 }
