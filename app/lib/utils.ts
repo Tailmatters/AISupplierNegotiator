@@ -1,119 +1,71 @@
-import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
 /**
- * Combine multiple class names with Tailwind CSS support
+ * Combines class values into a single string using clsx and tailwind-merge
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date with options
+ * Format a number as currency 
  */
-export function formatDate(
-  date: Date | string | number,
-  options: Intl.DateTimeFormatOptions = {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }
-): string {
-  return new Intl.DateTimeFormat('en-US', {
-    ...options,
-  }).format(new Date(date))
-}
-
-/**
- * Format currency with options
- */
-export function formatCurrency(
-  amount: number,
-  options: Intl.NumberFormatOptions = {
-    style: 'currency',
-    currency: 'USD',
-  }
-): string {
+export function formatCurrency(amount: number, currency = 'USD', options?: Intl.NumberFormatOptions) {
   return new Intl.NumberFormat('en-US', {
-    ...options,
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+    ...options
   }).format(amount)
 }
 
 /**
- * Format percentage with options
+ * Format a date with custom options
  */
-export function formatPercent(
-  value: number,
-  options: Intl.NumberFormatOptions = {
-    style: 'percent',
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+export function formatDate(
+  date: Date | string | number,
+  options: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   }
-): string {
-  return new Intl.NumberFormat('en-US', {
-    ...options,
-  }).format(value)
+) {
+  return new Intl.DateTimeFormat('en-US', options).format(
+    typeof date === 'string' || typeof date === 'number' 
+      ? new Date(date) 
+      : date
+  )
 }
 
 /**
- * Truncate a string to a maximum length with ellipsis
+ * Truncate text with ellipsis
  */
-export function truncate(str: string, length: number): string {
-  if (str.length <= length) {
-    return str
-  }
-  
-  return str.slice(0, length) + '...'
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength)}...`
 }
 
 /**
- * Deep merge objects
+ * Calculate the percentage of a value from a total
  */
-export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
-  const merged = { ...target } as any
-
-  for (const key in source) {
-    const sourceValue = source[key]
-    const targetValue = target[key]
-
-    if (
-      sourceValue &&
-      typeof sourceValue === 'object' &&
-      targetValue &&
-      typeof targetValue === 'object' &&
-      !Array.isArray(sourceValue) &&
-      !Array.isArray(targetValue)
-    ) {
-      merged[key] = deepMerge(targetValue, sourceValue)
-    } else if (sourceValue !== undefined) {
-      merged[key] = sourceValue
-    }
-  }
-
-  return merged
+export function calculatePercentage(value: number, total: number): number {
+  if (total === 0) return 0
+  return (value / total) * 100
 }
 
 /**
- * Capitalize the first letter of a string
- */
-export function capitalize(str: string): string {
-  if (!str || typeof str !== 'string') return ''
-  return str.charAt(0).toUpperCase() + str.slice(1)
-}
-
-/**
- * Create a debounced function
+ * Debounce a function
  */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null
+  let timeout: ReturnType<typeof setTimeout> | null = null
   
-  return function(...args: Parameters<T>) {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout)
     
     timeout = setTimeout(() => {
       func(...args)
@@ -122,15 +74,19 @@ export function debounce<T extends (...args: any[]) => any>(
 }
 
 /**
- * Generate a random string of specified length
+ * Convert kebab-case or snake_case to camelCase
  */
-export function generateRandomString(length: number = 8): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  
-  return result
+export function toCamelCase(str: string): string {
+  return str
+    .replace(/[-_](.)/g, (_, c) => c.toUpperCase())
+    .replace(/^(.)/, (_, c) => c.toLowerCase())
+}
+
+/**
+ * Generate random ID
+ */
+export function generateId(length = 8): string {
+  return Math.random()
+    .toString(36)
+    .substring(2, 2 + length)
 }

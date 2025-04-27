@@ -4,99 +4,100 @@ import React, { ReactNode, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
-// Function to create a query client
-export const createQueryClient = () => new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 1,
+// Config options for query fetcher
+type QueryFetcherConfig = {
+  on401?: 'throw' | 'returnNull' | 'redirect'
+  redirectTo?: string
+}
+
+// Base API request function
+export async function apiRequest(
+  method: string,
+  path: string,
+  body?: any,
+  headers?: Record<string, string>
+) {
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
     },
-  },
-})
-
-// Global shared queryClient instance
-export const queryClient = createQueryClient()
-
-// API request options
-type APIRequestOptions = {
-  on401?: 'throwError' | 'returnNull'
-  customHeaders?: Record<string, string>
-}
-
-/**
- * Generic API request function for use with TanStack Query
- */
-export async function apiRequest<T = any>(
-  method: string, 
-  url: string, 
-  body?: any, 
-  options: APIRequestOptions = {}
-): Promise<Response> {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options.customHeaders,
+    credentials: 'include',
   }
 
-  try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'include',
-    })
-
-    // Handle unauthorized
-    if (response.status === 401 && options.on401 === 'returnNull') {
-      return response
-    }
-
-    // Handle unsuccessful responses
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null)
-      const errorMessage = errorData?.message || response.statusText || 'An error occurred'
-      throw new Error(errorMessage)
-    }
-
-    return response
-  } catch (error) {
-    console.error(`API ${method} request failed:`, error)
-    throw error
+  if (body) {
+    options.body = JSON.stringify(body)
   }
+
+  const response = await fetch(path, options)
+
+  // Handle unauthenticated requests
+  if (response.status === 401) {
+    throw new Error('Unauthorized')
+  }
+
+  // Handle general API errors
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(errorText || `API error: ${response.status}`)
+  }
+
+  return response
 }
 
-/**
- * Helper function to generate a query function for TanStack Query
- */
-export function getQueryFn<T = any>(options: APIRequestOptions = {}) {
+// Query fetcher with config options
+export function getQueryFn<T = any>(config: QueryFetcherConfig = {}) {
   return async ({ queryKey }: { queryKey: string[] }): Promise<T | undefined> => {
-    const [url] = queryKey
+    const [path] = queryKey
     
     try {
-      const response = await apiRequest<T>('GET', url, undefined, options)
+      const response = await apiRequest('GET', path)
       
-      if (response.status === 401 && options.on401 === 'returnNull') {
+      // Empty response with 204 status
+      if (response.status === 204) {
         return undefined
       }
       
       return await response.json()
     } catch (error) {
-      console.error('Query error:', error)
+      if (error.message === 'Unauthorized') {
+        if (config.on401 === 'redirect' && config.redirectTo) {
+          if (typeof window !== 'undefined') {
+            window.location.href = config.redirectTo
+          }
+          return undefined
+        }
+        
+        if (config.on401 === 'returnNull') {
+          return undefined
+        }
+      }
+      
       throw error
     }
   }
 }
 
-/**
- * React Query Client Provider
- */
-export function QueryProvider({ children }: { children: ReactNode }) {
-  const [client] = useState(() => createQueryClient())
+// Create a client
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+  },
+})
 
+export function QueryProvider({ children }: { children: ReactNode }) {
+  const [client] = useState(() => queryClient)
+  
   return (
     <QueryClientProvider client={client}>
       {children}
-      <ReactQueryDevtools initialIsOpen={false} />
+      {process.env.NODE_ENV !== 'production' && (
+        <ReactQueryDevtools initialIsOpen={false} position="bottom" />
+      )}
     </QueryClientProvider>
   )
 }
