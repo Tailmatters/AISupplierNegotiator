@@ -1,16 +1,15 @@
 'use client'
 
 import * as React from 'react'
-
-import type {
-  ToastActionElement,
-  ToastProps,
+import { 
+  type ToastActionElement, 
+  type ToastProps 
 } from '@/components/ui/toast'
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 1000
+const TOAST_REMOVE_DELAY = 5000
 
-type ToasterToast = ToastProps & {
+type ToastType = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
@@ -26,8 +25,8 @@ const actionTypes = {
 
 let count = 0
 
-function genId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
+function generateId() {
+  count = (count + 1) % Number.MAX_VALUE
   return count.toString()
 }
 
@@ -36,23 +35,23 @@ type ActionType = typeof actionTypes
 type Action =
   | {
       type: ActionType['ADD_TOAST']
-      toast: ToasterToast
+      toast: ToastType
     }
   | {
       type: ActionType['UPDATE_TOAST']
-      toast: Partial<ToasterToast>
+      toast: Partial<ToastType>
     }
   | {
       type: ActionType['DISMISS_TOAST']
-      toastId?: ToasterToast['id']
+      toastId?: string
     }
   | {
       type: ActionType['REMOVE_TOAST']
-      toastId?: ToasterToast['id']
+      toastId?: string
     }
 
 interface State {
-  toasts: ToasterToast[]
+  toasts: ToastType[]
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
@@ -128,7 +127,7 @@ export const reducer = (state: State, action: Action): State => {
   }
 }
 
-const listeners: ((state: State) => void)[] = []
+const listeners: Array<(state: State) => void> = []
 
 let memoryState: State = { toasts: [] }
 
@@ -139,12 +138,12 @@ function dispatch(action: Action) {
   })
 }
 
-type Toast = Omit<ToasterToast, 'id'>
+type Toast = Omit<ToastType, 'id'>
 
 function toast({ ...props }: Toast) {
-  const id = genId()
+  const id = generateId()
 
-  const update = (props: ToasterToast) =>
+  const update = (props: ToastType) =>
     dispatch({
       type: 'UPDATE_TOAST',
       toast: { ...props, id },

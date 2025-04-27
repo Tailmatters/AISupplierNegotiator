@@ -8,19 +8,11 @@ import { AuthProvider } from '@/hooks/use-auth'
 import { Toaster } from '@/components/ui/toaster'
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = React.useState(false)
-  
-  // Ensure we only render once hydrated to prevent theme flicker
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  // Create a new QueryClient for each client
+  const [client] = React.useState(() => queryClient)
 
-  if (!mounted) {
-    return <div className="bg-background">{children}</div>
-  }
-  
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={client}>
       <ThemeProvider
         attribute="class"
         defaultTheme="system"
