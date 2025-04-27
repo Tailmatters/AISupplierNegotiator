@@ -1,131 +1,106 @@
-"use client"
+"use client";
 
-import {
-  QueryClient,
-  QueryClientProvider as TanstackQueryClientProvider,
-  UseQueryOptions,
-  UseMutationOptions,
-} from "@tanstack/react-query";
-import { toast } from "@/hooks/use-toast";
+import { QueryClient } from "@tanstack/react-query";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 60 * 1000, // 1 minute
       refetchOnWindowFocus: false,
       retry: 1,
     },
   },
 });
 
-export function QueryClientProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <TanstackQueryClientProvider client={queryClient}>
-      {children}
-    </TanstackQueryClientProvider>
-  );
+interface ApiRequestOptions {
+  headers?: Record<string, string>;
+  body?: any;
 }
-
-type FetcherOptions = {
-  on401?: "throw" | "returnNull";
-};
-
-// This is our default fetcher for queries
-export function getQueryFn({ on401 = "throw" }: FetcherOptions = {}) {
-  return async function queryFn<T>({ queryKey }: { queryKey: string[] }): Promise<T> {
-    const [path] = queryKey;
-    
-    const response = await fetch(path);
-    
-    if (response.status === 401) {
-      if (on401 === "returnNull") {
-        return null as unknown as T;
-      } else {
-        throw new Error("Unauthorized");
-      }
-    }
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.message || response.statusText || "An error occurred";
-      throw new Error(errorMessage);
-    }
-    
-    // Return null for 204 No Content responses
-    if (response.status === 204) {
-      return null as unknown as T;
-    }
-    
-    return response.json();
-  };
-}
-
-type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export async function apiRequest(
-  method: Method,
+  method: string,
   url: string,
-  data?: any
-): Promise<Response> {
-  const options: RequestInit = {
+  data?: any,
+  options: ApiRequestOptions = {}
+) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+
+  const config: RequestInit = {
     method,
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     credentials: "include",
   };
 
-  if (data && !(data instanceof FormData)) {
-    options.body = JSON.stringify(data);
-  } else if (data) {
-    // FormData handling - remove Content-Type to let the browser set it
-    delete options.headers["Content-Type"];
-    options.body = data;
+  if (data !== undefined) {
+    config.body = JSON.stringify(data);
   }
 
-  const response = await fetch(url, options);
+  const response = await fetch(url, config);
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.message || response.statusText || "An error occurred";
-    throw new Error(errorMessage);
+    if (response.status === 401) {
+      // Handle unauthorized/unauthenticated requests
+      queryClient.setQueryData(["/api/user"], null);
+    }
+
+    // Attempt to parse error response
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      errorData = { error: response.statusText };
+    }
+
+    throw new Error(
+      errorData.error || errorData.message || "An error occurred"
+    );
   }
 
+  // Handle empty responses (like 204 No Content)
+  if (response.status === 204) {
+    return response;
+  }
+
+  // Otherwise parse JSON
   return response;
 }
 
-export function createQueryOptions<TData, TError = Error>(
-  queryKey: string[],
-  options: Partial<UseQueryOptions<TData, TError>> = {},
-  fetcherOptions: FetcherOptions = {}
-): UseQueryOptions<TData, TError> {
-  return {
-    queryKey,
-    queryFn: getQueryFn(fetcherOptions) as any,
-    ...options,
-  };
+interface QueryFnOptions {
+  on401?: "throw" | "returnNull";
 }
 
-export function createMutationOptions<TData, TVariables, TError = Error, TContext = unknown>(
-  options: Partial<UseMutationOptions<TData, TError, TVariables, TContext>> = {}
-): UseMutationOptions<TData, TError, TVariables, TContext> {
-  return {
-    onError: (error: TError) => {
-      const message = error instanceof Error ? error.message : "Something went wrong";
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
+export function getQueryFn({ on401 = "throw" }: QueryFnOptions = {}) {
+  return async ({ queryKey }: { queryKey: string[] }) => {
+    const [url] = queryKey;
+    try {
+      const response = await fetch(url, {
+        credentials: "include",
       });
-      
-      if (options.onError) {
-        options.onError(error);
+
+      if (!response.ok) {
+        if (response.status === 401 && on401 === "returnNull") {
+          return null;
+        }
+
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = { error: response.statusText };
+        }
+
+        throw new Error(
+          errorData.error || errorData.message || "An error occurred"
+        );
       }
-    },
-    ...options,
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error fetching ${url}:`, error);
+      throw error;
+    }
   };
 }

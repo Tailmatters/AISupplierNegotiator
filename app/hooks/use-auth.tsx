@@ -1,142 +1,186 @@
-'use client';
+"use client";
 
-import * as React from 'react';
 import {
-  useQuery,
-  useMutation,
-  UseMutationResult,
-} from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
-import { getQueryFn, apiRequest, queryClient } from '@/lib/query-client';
+  createContext,
+  ReactNode,
+  useContext,
+  useState,
+  useEffect,
+} from "react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/query-client";
 
-// The User type should match what's returned from the /api/user endpoint
-interface User {
+export interface User {
   id: number;
   username: string;
   name: string;
+  email: string;
+  role: string;
 }
 
-type AuthContextType = {
+interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
-  error: Error | null;
-  loginMutation: UseMutationResult<User, Error, LoginData>;
-  logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<User, Error, RegisterData>;
-};
+  loading: boolean;
+  login: (credentials: LoginCredentials) => Promise<boolean>;
+  register: (userData: RegisterData) => Promise<boolean>;
+  logout: () => Promise<void>;
+}
 
-type LoginData = {
+interface LoginCredentials {
   username: string;
   password: string;
-};
+}
 
-type RegisterData = {
+interface RegisterData {
   username: string;
   name: string;
+  email: string;
   password: string;
-};
+  confirmPassword: string;
+}
 
-const AuthContext = React.createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { toast } = useToast();
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
-  
-  const {
-    data: user,
-    error,
-    isLoading,
-  } = useQuery<User | null, Error>({
-    queryKey: ['/api/user'],
-    queryFn: getQueryFn({ on401: 'returnNull' }),
-  });
+  const { toast } = useToast();
 
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest('POST', '/api/auth/login', credentials);
-      return await res.json();
-    },
-    onSuccess: (user: User) => {
-      queryClient.setQueryData(['/api/user'], user);
-      toast({
-        title: 'Welcome back!',
-        description: `Successfully logged in as ${user.name}`,
-      });
-      router.push('/dashboard');
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Login failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("/api/user");
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const registerMutation = useMutation({
-    mutationFn: async (userData: RegisterData) => {
-      const res = await apiRequest('POST', '/api/auth/register', userData);
-      return await res.json();
-    },
-    onSuccess: (user: User) => {
-      queryClient.setQueryData(['/api/user'], user);
-      toast({
-        title: 'Account created',
-        description: `Welcome, ${user.name}! Your account has been created successfully.`,
-      });
-      router.push('/dashboard');
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Registration failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
+    fetchUser();
+  }, []);
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest('POST', '/api/auth/logout');
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(['/api/user'], null);
-      toast({
-        title: 'Logged out',
-        description: 'You have been successfully logged out',
+  const login = async (credentials: LoginCredentials): Promise<boolean> => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(credentials),
       });
-      router.push('/auth');
-    },
-    onError: (error: Error) => {
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Login failed");
+      }
+
+      const userData = await response.json();
+      setUser(userData);
       toast({
-        title: 'Logout failed',
-        description: error.message,
-        variant: 'destructive',
+        title: "Welcome back!",
+        description: "You have successfully logged in.",
       });
-    },
-  });
+      
+      return true;
+    } catch (error) {
+      toast({
+        title: "Login failed",
+        description: error instanceof Error ? error.message : "An error occurred during login",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (userData: RegisterData): Promise<boolean> => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(userData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || error.error || "Registration failed");
+      }
+
+      const registeredUser = await response.json();
+      setUser(registeredUser);
+      toast({
+        title: "Registration successful",
+        description: "Your account has been created.",
+      });
+      
+      return true;
+    } catch (error) {
+      toast({
+        title: "Registration failed",
+        description: error instanceof Error ? error.message : "An error occurred during registration",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+      
+      setUser(null);
+      // Clear any cached user data
+      queryClient.removeQueries({ queryKey: ["/api/user"] });
+      
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+      
+      router.push("/auth");
+    } catch (error) {
+      toast({
+        title: "Logout error",
+        description: "There was a problem logging out.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user: user ?? null,
-        isLoading,
-        error,
-        loginMutation,
-        logoutMutation,
-        registerMutation,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = React.useContext(AuthContext);
+  const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

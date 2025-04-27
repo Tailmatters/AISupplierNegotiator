@@ -1,21 +1,37 @@
 "use client"
 
 import * as React from "react"
+import {
+  useForm as useHookForm,
+  UseFormProps,
+  SubmitHandler,
+  UseFormReturn,
+  FieldValues,
+  FieldPath,
+  FieldErrors,
+} from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { Slot } from "@radix-ui/react-slot"
-import {
-  Controller,
-  ControllerProps,
-  FieldPath,
-  FieldValues,
-  FormProvider,
-  useFormContext,
-} from "react-hook-form"
+import { z } from "zod"
 
-import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 
-const Form = FormProvider
+const Form = <
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any
+>({
+  children,
+  ...props
+}: UseFormProps<TFieldValues, TContext> & {
+  children: (methods: UseFormReturn<TFieldValues, TContext>) => React.ReactNode
+}) => {
+  const methods = useHookForm<TFieldValues, TContext>({
+    ...props,
+  })
+  return <>{children(methods)}</>
+}
 
 type FormFieldContextValue<
   TFieldValues extends FieldValues = FieldValues,
@@ -33,10 +49,13 @@ const FormField = <
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
 >({
   ...props
-}: ControllerProps<TFieldValues, TName>) => {
+}: {
+  name: TName
+  children: React.ReactNode
+} & UseFormReturn<TFieldValues>) => {
   return (
     <FormFieldContext.Provider value={{ name: props.name }}>
-      <Controller {...props} />
+      {props.children}
     </FormFieldContext.Provider>
   )
 }
@@ -44,7 +63,7 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const { getFieldState, formState } = useFormContext()
+  const { getFieldState, formState } = React.useContext(FormContext)
 
   const fieldState = getFieldState(fieldContext.name, formState)
 
@@ -176,3 +195,7 @@ export {
   FormMessage,
   FormField,
 }
+
+const FormContext = React.createContext<UseFormReturn>(
+  {} as UseFormReturn
+)

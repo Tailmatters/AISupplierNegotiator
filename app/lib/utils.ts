@@ -1,75 +1,122 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
+/**
+ * Combines multiple class names into a single className string
+ * Uses clsx for conditional classes and tailwind-merge to handle Tailwind conflicts
+ */
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: Date | string): string {
-  if (typeof date === "string") {
-    date = new Date(date)
-  }
-  
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
+/**
+ * Formats a date to a readable string
+ * @param date - The date to format
+ * @param options - Intl.DateTimeFormatOptions
+ * @returns Formatted date string
+ */
+export function formatDate(
+  date: Date | string,
+  options: Intl.DateTimeFormatOptions = {
     month: "long",
     day: "numeric",
-  }).format(date)
+    year: "numeric",
+  }
+): string {
+  if (!date) return "";
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-US", options).format(dateObj);
 }
 
-export function formatCurrency(amount: number, currency = "USD"): string {
+/**
+ * Formats a currency value
+ * @param amount - The amount to format
+ * @param currency - Currency code (default: USD)
+ * @returns Formatted currency string
+ */
+export function formatCurrency(
+  amount: number,
+  currency: string = "USD"
+): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-  }).format(amount)
+  }).format(amount);
 }
 
-export function formatCompactNumber(number: number): string {
-  return new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    compactDisplay: "short",
-  }).format(number)
+/**
+ * Truncates text to a specified length with ellipsis
+ * @param text - The text to truncate
+ * @param length - Maximum length before truncation
+ * @returns Truncated text with ellipsis if needed
+ */
+export function truncateText(text: string, length: number): string {
+  if (!text) return "";
+  return text.length > length ? `${text.substring(0, length)}...` : text;
 }
 
-export function percentChange(current: number, previous: number): number {
-  if (previous === 0) return 0
-  return ((current - previous) / previous) * 100
-}
-
-export function truncateText(text: string, length = 100): string {
-  if (text.length <= length) return text
-  return text.slice(0, length) + "..."
-}
-
-export function calculateSavings(initialOffer: number, finalOffer: number): number {
-  if (initialOffer <= 0) return 0
-  return ((initialOffer - finalOffer) / initialOffer) * 100
-}
-
+/**
+ * Generates initials from a name (e.g., "John Doe" -> "JD")
+ * @param name - The name to generate initials from
+ * @returns Initials string
+ */
 export function getInitials(name: string): string {
-  if (!name) return ''
-  
-  const parts = name.split(' ')
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
-  
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+  if (!name) return "";
+  return name
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
+    .substring(0, 2);
 }
 
-export function generateAvatarColor(name: string): string {
-  if (!name) return '#6366F1' // Default indigo color
+/**
+ * Calculates the percentage difference between two numbers
+ * @param current - Current value
+ * @param previous - Previous value
+ * @returns Percentage change as a number
+ */
+export function calculatePercentChange(
+  current: number,
+  previous: number
+): number {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+/**
+ * Formats a number with thousand separators and decimal places
+ * @param value - The number to format
+ * @param decimals - Number of decimal places (default: 0)
+ * @returns Formatted number string
+ */
+export function formatNumber(value: number, decimals: number = 0): string {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
+/**
+ * Debounces a function call
+ * @param func - The function to debounce
+ * @param wait - Timeout in milliseconds
+ * @returns Debounced function
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
   
-  // Generate a stable hash from the string
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  
-  // Convert to hex color
-  let color = '#'
-  for (let i = 0; i < 3; i++) {
-    const value = (hash >> (i * 8)) & 0xFF
-    color += ('00' + value.toString(16)).substr(-2)
-  }
-  
-  return color
+  return function(...args: Parameters<T>): void {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+    
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(later, wait);
+  };
 }
