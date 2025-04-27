@@ -1,76 +1,77 @@
-import { ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { type ClassValue, clsx } from 'clsx'
 
 /**
- * Combine multiple class names with Tailwind CSS compatibility
+ * Combines multiple class names using clsx and tailwind-merge
+ * This helps with conditional classes and avoids conflicting Tailwind classes
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date to a string with options
+ * Format a date to a human-readable string
  */
-export function formatDate(
-  date: Date | string | number,
-  options: Intl.DateTimeFormatOptions = {
+export function formatDate(date: Date | string, options: Intl.DateTimeFormatOptions = {}) {
+  const defaultOptions: Intl.DateTimeFormatOptions = {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   }
-) {
-  return new Intl.DateTimeFormat('en-US', options).format(new Date(date))
+  
+  const mergedOptions = { ...defaultOptions, ...options }
+  
+  return new Date(date).toLocaleDateString('en-US', mergedOptions)
 }
 
 /**
- * Format a number as a currency string with options
+ * Format a currency amount
  */
 export function formatCurrency(
   amount: number,
-  options: Intl.NumberFormatOptions = {
+  currency = 'USD',
+  locale = 'en-US'
+) {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
-  }
+    currency,
+  }).format(amount)
+}
+
+/**
+ * Format a number with commas
+ */
+export function formatNumber(
+  num: number,
+  options: Intl.NumberFormatOptions = {}
 ) {
-  return new Intl.NumberFormat('en-US', options).format(amount)
+  return new Intl.NumberFormat('en-US', options).format(num)
 }
 
 /**
- * Format a number as a percentage string
+ * Truncate a string to a specific length and add ellipsis
  */
-export function formatPercent(
-  value: number,
-  options: Intl.NumberFormatOptions = {
-    style: 'percent',
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+export function truncate(str: string, length: number) {
+  if (!str) return ''
+  return str.length > length ? `${str.substring(0, length)}...` : str
+}
+
+/**
+ * Safe JSON parse that returns fallback on error
+ */
+export function safeJsonParse<T>(
+  value: string,
+  fallback: T
+): T {
+  try {
+    return JSON.parse(value) as T
+  } catch (e) {
+    return fallback
   }
-) {
-  return new Intl.NumberFormat('en-US', options).format(value / 100)
 }
 
 /**
- * Generate a random string of specified length
- */
-export function generateRandomString(length: number): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
-}
-
-/**
- * Truncate a string to a maximum length with an ellipsis
- */
-export function truncateString(str: string, maxLength: number): string {
-  if (str.length <= maxLength) return str
-  return str.slice(0, maxLength) + '...'
-}
-
-/**
- * Debounce a function call
+ * Debounce a function
  */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
@@ -87,55 +88,35 @@ export function debounce<T extends (...args: any[]) => any>(
     if (timeout !== null) {
       clearTimeout(timeout)
     }
+    
     timeout = setTimeout(later, wait)
   }
 }
 
 /**
- * Group an array of objects by a key
+ * Get initials from name
  */
-export function groupBy<T, K extends keyof any>(
-  array: T[],
-  getKey: (item: T) => K
-): Record<K, T[]> {
-  return array.reduce(
-    (result, item) => {
-      const key = getKey(item)
-      if (!result[key]) {
-        result[key] = []
-      }
-      result[key].push(item)
-      return result
-    },
-    {} as Record<K, T[]>
-  )
+export function getInitials(name: string): string {
+  if (!name) return ''
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2)
 }
 
 /**
- * Deep merge two objects
+ * Generate a random color based on a string (for avatars, etc.)
  */
-export function deepMerge<T extends object = object, U extends object = T>(
-  target: T,
-  source: U
-): T & U {
-  const isObject = (obj: any): obj is object => obj && typeof obj === 'object'
+export function stringToColor(str: string): string {
+  if (!str) return '#6366F1' // Default indigo color
   
-  const output = { ...target } as T & U
-  
-  if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach(key => {
-      const targetValue = (target as any)[key]
-      const sourceValue = (source as any)[key]
-      
-      if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
-        (output as any)[key] = [...targetValue, ...sourceValue]
-      } else if (isObject(targetValue) && isObject(sourceValue)) {
-        (output as any)[key] = deepMerge(targetValue, sourceValue)
-      } else {
-        (output as any)[key] = sourceValue
-      }
-    })
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
   }
   
-  return output
+  const hue = Math.abs(hash % 360)
+  return `hsl(${hue}, 70%, 50%)`
 }

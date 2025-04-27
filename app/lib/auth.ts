@@ -1,122 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT, jwtVerify } from 'jose'
-import { compare, hash } from 'bcrypt'
-import { db, getUserByUsername, getUserById, createUser } from '@/lib/db'
 import { cookies } from 'next/headers'
-import { users, insertUserSchema } from '@/schema'
-import { eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { db } from './db'
+import { users } from '@/schema'
+import { eq } from 'drizzle-orm'
+import { compare, hash } from 'bcrypt'
 
-// Constants
-const JWT_SECRET = process.env.SESSION_SECRET || 'default-secret-change-me'
-const COOKIE_NAME = 'auth-token'
-const SALT_ROUNDS = 10
-const TOKEN_EXPIRY = '7d'
+const JWT_SECRET = process.env.SESSION_SECRET || 'fallback-secret-do-not-use-in-production'
 
-// JWT token structure
-interface JWTPayload {
-  id: number
-  username: string
-  iat: number
-  exp: number
-}
+// Cookie name for the auth token
+const AUTH_COOKIE = 'auth-token'
 
-// Authentication helper functions
-export async function hashPassword(password: string): Promise<string> {
-  return hash(password, SALT_ROUNDS)
-}
+// JWT expiration time (24 hours)
+const EXPIRES_IN = '24h'
 
-export async function comparePasswords(
-  plainPassword: string,
-  hashedPassword: string
-): Promise<boolean> {
-  return compare(plainPassword, hashedPassword)
-}
+// User schemas
+const loginSchema = z.object({
+  username: z.string().min(3).max(50),
+  password: z.string().min(5)
+})
 
-// Generate JWT token
-async function generateToken(userId: number, username: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const secretKey = encoder.encode(JWT_SECRET)
-  
-  return new SignJWT({ id: userId, username })
+const registerSchema = z.object({
+  username: z.string().min(3).max(50),
+  password: z.string().min(5),
+  name: z.string().optional(),
+  email: z.string().email().optional(),
+  role: z.enum(['admin', 'buyer', 'supplier']).default('buyer')
+})
+
+/**
+ * Create a new JWT token
+ */
+async function createToken(payload: any) {
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(TOKEN_EXPIRY)
-    .sign(secretKey)
+    .setExpirationTime(EXPIRES_IN)
+    .sign(new TextEncoder().encode(JWT_SECRET))
+  
+  return token
 }
 
-// Set auth cookie with token
-async function setAuthCookie(
-  response: NextResponse,
-  token: string
-): Promise<void> {
-  response.cookies.set({
-    name: COOKIE_NAME,
-    value: token,
-    httpOnly: true,
-    path: '/',
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days in seconds
-  })
-}
-
-// Clear auth cookie
-async function clearAuthCookie(response: NextResponse): Promise<void> {
-  response.cookies.set({
-    name: COOKIE_NAME,
-    value: '',
-    httpOnly: true,
-    path: '/',
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 0,
-  })
-}
-
-// Validate auth token and extract payload
-export async function validateToken(token: string): Promise<JWTPayload | null> {
+/**
+ * Verify and decode a JWT token
+ */
+async function verifyToken(token: string) {
   try {
-    const encoder = new TextEncoder()
-    const secretKey = encoder.encode(JWT_SECRET)
-    
-    const { payload } = await jwtVerify(token, secretKey)
-    return payload as JWTPayload
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(JWT_SECRET)
+    )
+    return payload
   } catch (error) {
     return null
   }
 }
 
-// Get current user from the request cookie
-export async function getCurrentUser(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value
+/**
+ * Get user from JWT token in request
+ */
+export async function getUserFromRequest(request: NextRequest) {
+  const cookieStore = cookies()
+  const token = cookieStore.get(AUTH_COOKIE)?.value || request.headers.get('Authorization')?.split(' ')[1]
   
-  if (!token) {
-    return null
-  }
+  if (!token) return null
   
-  const payload = await validateToken(token)
+  const payload = await verifyToken(token)
+  if (!payload || !payload.id) return null
   
-  if (!payload) {
-    return null
-  }
+  // Fetch user from database
+  const [user] = await db
+    .select({
+      id: users.id,
+      username: users.username,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.id, Number(payload.id)))
   
-  return getUserById(payload.id)
+  return user || null
 }
 
-// Login schema
-const loginSchema = z.object({
-  username: z.string().min(3),
-  password: z.string().min(6),
-})
-
-// Handle login request
+/**
+ * Handle login request
+ */
 export async function handleLogin(request: NextRequest) {
   try {
     const body = await request.json()
     const validatedData = loginSchema.parse(body)
     
-    const user = await getUserByUsername(validatedData.username)
+    // Find user by username
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, validatedData.username))
     
     if (!user) {
       return NextResponse.json(
@@ -125,39 +105,49 @@ export async function handleLogin(request: NextRequest) {
       )
     }
     
-    const passwordMatch = await comparePasswords(
-      validatedData.password,
-      user.password
-    )
-    
-    if (!passwordMatch) {
+    // Verify password
+    const isPasswordValid = await compare(validatedData.password, user.password)
+    if (!isPasswordValid) {
       return NextResponse.json(
         { error: 'Invalid username or password' },
         { status: 401 }
       )
     }
     
-    const token = await generateToken(user.id, user.username)
-    const response = NextResponse.json(
-      {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-      { status: 200 }
-    )
+    // Create token
+    const token = await createToken({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+    })
     
-    await setAuthCookie(response, token)
+    // Get user data (without password)
+    const userData = {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    }
+    
+    // Set cookie
+    const response = NextResponse.json(userData)
+    response.cookies.set({
+      name: AUTH_COOKIE,
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24, // 24 hours
+    })
     
     return response
   } catch (error) {
     console.error('Login error:', error)
-    
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.errors },
+        { error: error.errors[0].message },
         { status: 400 }
       )
     }
@@ -169,56 +159,73 @@ export async function handleLogin(request: NextRequest) {
   }
 }
 
-// Handle registration request
+/**
+ * Handle register request
+ */
 export async function handleRegister(request: NextRequest) {
   try {
     const body = await request.json()
-    const validatedData = insertUserSchema.parse(body)
+    const validatedData = registerSchema.parse(body)
     
     // Check if username already exists
-    const existingUser = await getUserByUsername(validatedData.username)
+    const existingUser = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, validatedData.username))
     
-    if (existingUser) {
+    if (existingUser.length > 0) {
       return NextResponse.json(
-        { error: 'Username already exists' },
+        { error: 'Username already taken' },
         { status: 400 }
       )
     }
     
-    // Hash the password
-    const hashedPassword = await hashPassword(validatedData.password)
+    // Hash password
+    const hashedPassword = await hash(validatedData.password, 10)
     
-    // Create the user
-    const newUser = await createUser({
-      ...validatedData,
-      password: hashedPassword,
+    // Create user
+    const [user] = await db
+      .insert(users)
+      .values({
+        username: validatedData.username,
+        password: hashedPassword,
+        name: validatedData.name || null,
+        email: validatedData.email || null,
+        role: validatedData.role,
+      })
+      .returning({
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+      })
+    
+    // Create token
+    const token = await createToken({
+      id: user.id,
+      username: user.username,
+      role: user.role,
     })
     
-    // Generate JWT token
-    const token = await generateToken(newUser.id, newUser.username)
-    
-    // Create response
-    const response = NextResponse.json(
-      {
-        id: newUser.id,
-        username: newUser.username,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-      },
-      { status: 201 }
-    )
-    
-    // Set auth cookie
-    await setAuthCookie(response, token)
+    // Set cookie
+    const response = NextResponse.json(user)
+    response.cookies.set({
+      name: AUTH_COOKIE,
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24, // 24 hours
+    })
     
     return response
   } catch (error) {
     console.error('Registration error:', error)
-    
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid registration data', details: error.errors },
+        { error: error.errors[0].message },
         { status: 400 }
       )
     }
@@ -230,31 +237,34 @@ export async function handleRegister(request: NextRequest) {
   }
 }
 
-// Handle logout request
-export async function handleLogout() {
-  try {
-    const response = NextResponse.json(
-      { message: 'Logout successful' },
-      { status: 200 }
-    )
-    
-    await clearAuthCookie(response)
-    
-    return response
-  } catch (error) {
-    console.error('Logout error:', error)
-    
-    return NextResponse.json(
-      { error: 'Logout failed' },
-      { status: 500 }
-    )
-  }
+/**
+ * Handle logout request
+ */
+export async function handleLogout(request: NextRequest) {
+  // Clear auth cookie
+  const response = NextResponse.json({ success: true })
+  response.cookies.set({
+    name: AUTH_COOKIE,
+    value: '',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  })
+  
+  return response
 }
 
-// Get current user's data
-export async function getCurrentUserData(request: NextRequest) {
-  try {
-    const user = await getCurrentUser(request)
+/**
+ * Middleware to protect routes
+ */
+export function withAuth(
+  handler: (req: NextRequest, user: any) => Promise<Response>,
+  options?: { roles?: string[] }
+) {
+  return async (req: NextRequest) => {
+    const user = await getUserFromRequest(req)
     
     if (!user) {
       return NextResponse.json(
@@ -263,19 +273,14 @@ export async function getCurrentUserData(request: NextRequest) {
       )
     }
     
-    return NextResponse.json({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    })
-  } catch (error) {
-    console.error('Get user error:', error)
+    // Check role permissions
+    if (options?.roles && !options.roles.includes(user.role)) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
     
-    return NextResponse.json(
-      { error: 'Failed to get user data' },
-      { status: 500 }
-    )
+    return handler(req, user)
   }
 }
