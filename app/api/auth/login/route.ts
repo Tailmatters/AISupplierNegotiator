@@ -1,48 +1,44 @@
 import { NextRequest, NextResponse } from "next/server"
-import { authenticateUser, createSession } from "@/lib/auth"
+import { loginUser, createSession } from "@/lib/auth"
 import { z } from "zod"
 
+// Login validation schema
 const loginSchema = z.object({
-  username: z.string().min(3),
-  password: z.string().min(8),
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
 })
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json()
     
-    // Validate request body
-    const validation = loginSchema.safeParse(body)
-    if (!validation.success) {
+    // Validate with zod schema
+    const { username, password } = loginSchema.parse(body)
+    
+    // Authenticate the user
+    const user = await loginUser(username, password)
+    
+    // Create a session
+    await createSession(user.id, req)
+    
+    // Return user data (excluding password)
+    const { password: _, ...userWithoutPassword } = user
+    
+    return NextResponse.json(userWithoutPassword)
+    
+  } catch (error) {
+    if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { message: "Invalid request data", errors: validation.error.errors },
+        { error: "Validation failed", details: error.format() },
         { status: 400 }
       )
     }
     
-    const { username, password } = validation.data
-    
-    // Authenticate user
-    const user = await authenticateUser(username, password)
-    
-    if (!user) {
-      return NextResponse.json(
-        { message: "Invalid username or password" },
-        { status: 401 }
-      )
-    }
-    
-    // Create session
-    await createSession(user)
-    
-    // Return user data (without password)
-    const { password: _, ...userWithoutPassword } = user
-    return NextResponse.json(userWithoutPassword, { status: 200 })
-  } catch (error: any) {
     console.error("Login error:", error)
+    
     return NextResponse.json(
-      { message: error.message || "Authentication failed" },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "Authentication failed" },
+      { status: 401 }
     )
   }
 }

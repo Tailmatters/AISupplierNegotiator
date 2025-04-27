@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { logoutUser } from "@/lib/auth"
+import { deleteSession } from "@/lib/auth"
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    await logoutUser()
-    
-    return NextResponse.json(
-      { message: "Logged out successfully" },
-      { status: 200 }
-    )
-  } catch (error: any) {
+    return await deleteSession(req)
+  } catch (error) {
     console.error("Logout error:", error)
     return NextResponse.json(
-      { message: error.message || "Logout failed" },
+      { error: "Failed to logout" },
       { status: 500 }
     )
   }

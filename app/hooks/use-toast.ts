@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-
 import type {
   ToastActionElement,
   ToastProps,
@@ -44,11 +43,11 @@ type Action =
     }
   | {
       type: ActionType["DISMISS_TOAST"]
-      toastId?: ToasterToast["id"]
+      toastId?: string
     }
   | {
       type: ActionType["REMOVE_TOAST"]
-      toastId?: ToasterToast["id"]
+      toastId?: string
     }
 
 interface State {
@@ -79,11 +78,15 @@ const reducer = (state: State, action: Action): State => {
       // ! Side effects ! - This could be extracted into a dismissToast() action,
       // but I'll keep it here for simplicity
       if (toastId) {
-        addToRemoveQueue(toastId)
+        if (toastTimeouts.has(toastId)) {
+          clearTimeout(toastTimeouts.get(toastId))
+          toastTimeouts.delete(toastId)
+        }
       } else {
-        state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
-        })
+        for (const [id, timeout] of toastTimeouts.entries()) {
+          clearTimeout(timeout)
+          toastTimeouts.delete(id)
+        }
       }
 
       return {
@@ -112,44 +115,46 @@ const reducer = (state: State, action: Action): State => {
   }
 }
 
-function addToRemoveQueue(toastId: string) {
-  if (toastTimeouts.has(toastId)) {
-    return
-  }
-
-  const timeout = setTimeout(() => {
-    toastTimeouts.delete(toastId)
-    dispatch({
-      type: "REMOVE_TOAST",
-      toastId: toastId,
-    })
-  }, TOAST_REMOVE_DELAY)
-
-  toastTimeouts.set(toastId, timeout)
-}
-
-interface ToastContextType {
-  toasts: ToasterToast[]
-  toast: (props: Omit<ToasterToast, "id">) => void
-  dismiss: (toastId?: string) => void
-  update: (
-    id: string,
-    props: Partial<Omit<ToasterToast, "id">>
-  ) => void
-  current: () => ToasterToast[]
-}
-
-const ToastContext = React.createContext<ToastContextType | null>(null)
+const listeners: Array<(state: State) => void> = []
 
 let memoryState: State = { toasts: [] }
-
-let listeners: ((state: State) => void)[] = []
 
 function dispatch(action: Action) {
   memoryState = reducer(memoryState, action)
   listeners.forEach((listener) => {
     listener(memoryState)
   })
+}
+
+type Toast = Omit<ToasterToast, "id">
+
+function toast({ ...props }: Toast) {
+  const id = genId()
+
+  const update = (props: ToasterToast) =>
+    dispatch({
+      type: "UPDATE_TOAST",
+      toast: { ...props, id },
+    })
+  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+  dispatch({
+    type: "ADD_TOAST",
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss()
+      },
+    },
+  })
+
+  return {
+    id: id,
+    dismiss,
+    update,
+  }
 }
 
 function useToast() {
@@ -167,40 +172,9 @@ function useToast() {
 
   return {
     ...state,
-    toast: (props: Omit<ToasterToast, "id">) => {
-      const id = genId()
-
-      const update = (props: ToasterToast) =>
-        dispatch({
-          type: "UPDATE_TOAST",
-          toast: { ...props, id },
-        })
-      const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
-
-      dispatch({
-        type: "ADD_TOAST",
-        toast: {
-          ...props,
-          id,
-          open: true,
-          onOpenChange: (open: boolean) => {
-            if (!open) dismiss()
-          },
-        },
-      })
-
-      return {
-        id: id,
-        dismiss,
-        update,
-      }
-    },
+    toast,
     dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
-    update: (id: string, props: Partial<ToasterToast>) => {
-      dispatch({ type: "UPDATE_TOAST", toast: { ...props, id } })
-    },
-    current: () => memoryState.toasts,
   }
 }
 
-export { useToast, ToastContext }
+export { useToast, toast }
