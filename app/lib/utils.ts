@@ -1,133 +1,181 @@
-import { ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
-import { type ZodIssue } from 'zod'
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
 /**
- * Combines multiple class names into a single string using clsx and tailwind-merge
- * to properly handle Tailwind CSS classes
- * @param inputs Multiple class name inputs to combine
- * @returns A single string of combined class names
+ * Combines class names with tailwind merge
+ * @param inputs Class values to be merged
+ * @returns Merged class string
  */
-export function cn(...inputs: ClassValue[]): string {
+export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date into a localized string
+ * Format a date to a localized string
  * @param date Date to format
- * @param options Intl.DateTimeFormatOptions for formatting
+ * @param options Intl.DateTimeFormatOptions
  * @returns Formatted date string
  */
 export function formatDate(
   date: Date | string | number,
   options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   }
 ): string {
-  return new Intl.DateTimeFormat('en-US', {
-    ...options,
-  }).format(new Date(date))
+  return new Date(date).toLocaleDateString("en-US", options)
 }
 
 /**
- * Format a currency value
+ * Format a date with time
+ * @param date Date to format
+ * @returns Formatted date and time string
+ */
+export function formatDateTime(date: Date | string | number): string {
+  return formatDate(date, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+  })
+}
+
+/**
+ * Format currency amount
  * @param amount Amount to format
- * @param currency Currency code (default: USD)
+ * @param currency Currency code
  * @returns Formatted currency string
  */
 export function formatCurrency(
   amount: number,
-  currency: string = 'USD'
+  currency: string = "USD"
 ): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
     currency,
   }).format(amount)
 }
 
 /**
- * Format a number with specified options
- * @param value Number to format
- * @param options Intl.NumberFormatOptions for formatting
- * @returns Formatted number string
+ * Generate a random string
+ * @param length Length of the random string
+ * @returns Random string
  */
-export function formatNumber(
-  value: number,
-  options: Intl.NumberFormatOptions = {}
-): string {
-  return new Intl.NumberFormat('en-US', options).format(value)
-}
-
-/**
- * Format a percentage value
- * @param value Decimal value to format as percentage (e.g., 0.1 for 10%)
- * @param decimals Number of decimal places
- * @returns Formatted percentage string
- */
-export function formatPercentage(value: number, decimals: number = 2): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'percent',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value)
-}
-
-/**
- * Create a delay using a promise
- * @param ms Milliseconds to delay
- * @returns Promise that resolves after the delay
- */
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/**
- * Truncate a string to a maximum length with ellipsis
- * @param text Text to truncate
- * @param maxLength Maximum length before truncation
- * @returns Truncated text with ellipsis if needed
- */
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '...'
-}
-
-/**
- * Get form errors from Zod validation issues
- * @param issues Zod validation issues
- * @returns Object mapping field paths to error messages
- */
-export function getFormErrors(issues: ZodIssue[]): Record<string, string> {
-  const errors: Record<string, string> = {}
+export function generateRandomString(length: number = 8): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+  let result = ""
   
-  for (const issue of issues) {
-    const path = issue.path.join('.')
-    if (!errors[path]) {
-      errors[path] = issue.message
-    }
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   
-  return errors
+  return result
 }
 
 /**
- * Check if an object is empty
- * @param obj Object to check
- * @returns True if object has no own properties
+ * Truncate a string to a specified length
+ * @param str String to truncate
+ * @param length Maximum length
+ * @param ending Ending to append if truncated
+ * @returns Truncated string
  */
-export function isEmptyObject(obj: Record<string, unknown>): boolean {
-  return Object.keys(obj).length === 0
+export function truncateString(
+  str: string,
+  length: number = 50,
+  ending: string = "..."
+): string {
+  if (str.length <= length) {
+    return str
+  }
+  
+  return str.substring(0, length - ending.length) + ending
 }
 
 /**
- * Generate a random string ID
- * @param length Length of the ID
- * @returns Random string ID
+ * Debounce a function
+ * @param func Function to debounce
+ * @param wait Wait time in milliseconds
+ * @returns Debounced function
  */
-export function generateId(length: number = 12): string {
-  return Math.random()
-    .toString(36)
-    .substring(2, 2 + length)
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+  
+  return function(this: any, ...args: Parameters<T>) {
+    const context = this
+    
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+    
+    timeout = setTimeout(() => {
+      func.apply(context, args)
+    }, wait)
+  }
+}
+
+/**
+ * Group array items by a key
+ * @param array Array to group
+ * @param key Key to group by
+ * @returns Grouped object
+ */
+export function groupBy<T extends Record<string, any>, K extends keyof T>(
+  array: T[],
+  key: K
+): Record<string, T[]> {
+  return array.reduce((result, item) => {
+    const groupKey = String(item[key])
+    result[groupKey] = result[groupKey] || []
+    result[groupKey].push(item)
+    return result
+  }, {} as Record<string, T[]>)
+}
+
+/**
+ * Extract distinct values for a key from an array of objects
+ * @param array Array of objects
+ * @param key Key to extract values for
+ * @returns Array of distinct values
+ */
+export function getDistinctValues<T extends Record<string, any>, K extends keyof T>(
+  array: T[],
+  key: K
+): T[K][] {
+  return [...new Set(array.map(item => item[key]))]
+}
+
+/**
+ * Parse a string to a Date, handling various formats
+ * @param dateStr Date string
+ * @returns Date object or null if invalid
+ */
+export function parseDate(dateStr: string): Date | null {
+  if (!dateStr) return null
+  
+  const date = new Date(dateStr)
+  return isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * Calculate difference in days between two dates
+ * @param date1 First date
+ * @param date2 Second date (defaults to now)
+ * @returns Number of days
+ */
+export function daysBetween(
+  date1: Date | string | number,
+  date2: Date | string | number = new Date()
+): number {
+  const d1 = new Date(date1)
+  const d2 = new Date(date2)
+  
+  const diffTime = Math.abs(d2.getTime() - d1.getTime())
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  
+  return diffDays
 }
