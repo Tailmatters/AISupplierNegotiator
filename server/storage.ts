@@ -1886,64 +1886,80 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Create storage instance
-// Temporarily use MemStorage instead of DatabaseStorage until we resolve the database connection issues
-export const storage = new MemStorage();
+// Create storage instance with improved database resilience
+// We're now using DatabaseStorage with enhanced retry logic and wake-up functionality
+export const storage = new DatabaseStorage();
 
-// Seed memory storage with sample suppliers
+// Import executeQuery from the database-retry utility
+import { executeQuery } from '../app/lib/database-retry';
+
+// Seed database with sample suppliers
 async function seedSampleData() {
   try {
-    // Check if we already have suppliers
-    const existingSuppliers = await storage.getSuppliers();
-    
-    if (existingSuppliers.length === 0) {
-      console.log("Seeding storage with sample suppliers...");
+    await executeQuery(async () => {
+      // Check if we already have suppliers
+      const existingSuppliers = await storage.getSuppliers();
       
-      // Sample suppliers with simplified schema for memory storage
-      const sampleSuppliers: InsertSupplier[] = [
-        {
-          name: "Dell Technologies",
-          email: "contact@dell.com",
-          contactPerson: "John Miller"
-        },
-        {
-          name: "Herman Miller",
-          email: "procurement@hermanmiller.com",
-          contactPerson: "Sarah Johnson"
-        },
-        {
-          name: "DHL Express",
-          email: "business@dhl.com",
-          contactPerson: "Michael Torres"
-        },
-        {
-          name: "AWS",
-          email: "enterprise@aws.com",
-          contactPerson: "Jason Wei"
-        },
-        {
-          name: "Staples",
-          email: "b2b@staples.com",
-          contactPerson: "Melissa Chen"
+      if (existingSuppliers.length === 0) {
+        console.log("Seeding database with sample suppliers...");
+        
+        // Sample suppliers for database storage
+        const sampleSuppliers: InsertSupplier[] = [
+          {
+            name: "Dell Technologies",
+            email: "contact@dell.com",
+            contactPerson: "John Miller",
+            categoryId: 1, // IT Hardware
+            phone: "+1-800-999-3355"
+          },
+          {
+            name: "Herman Miller",
+            email: "procurement@hermanmiller.com",
+            contactPerson: "Sarah Johnson",
+            categoryId: 2, // Office Furniture
+            phone: "+1-888-443-4357"
+          },
+          {
+            name: "DHL Express",
+            email: "business@dhl.com",
+            contactPerson: "Michael Torres",
+            categoryId: 3, // Logistics
+            phone: "+1-800-225-5345"
+          },
+          {
+            name: "AWS",
+            email: "enterprise@aws.com",
+            contactPerson: "Jason Wei",
+            categoryId: 4, // Cloud Services
+            phone: "+1-206-266-1000"
+          },
+          {
+            name: "Staples",
+            email: "b2b@staples.com",
+            contactPerson: "Melissa Chen",
+            categoryId: 5, // Office Supplies
+            phone: "+1-800-338-0252"
+          }
+        ];
+        
+        // Create suppliers with retry logic
+        for (const supplier of sampleSuppliers) {
+          try {
+            await storage.createSupplier(supplier);
+            console.log(`Created supplier: ${supplier.name}`);
+          } catch (supplierError) {
+            console.warn(`Error creating supplier ${supplier.name}:`, supplierError);
+            // Continue with other suppliers even if one fails
+          }
         }
-      ];
-      
-      // Create suppliers
-      for (const supplier of sampleSuppliers) {
-        try {
-          await storage.createSupplier(supplier);
-        } catch (supplierError) {
-          console.warn(`Error creating supplier ${supplier.name}:`, supplierError);
-          // Continue with other suppliers even if one fails
-        }
+        
+        console.log("Database seeded successfully!");
+      } else {
+        console.log("Database already contains suppliers, skipping seed.");
       }
-      
-      console.log("Sample data seeded successfully!");
-    } else {
-      console.log("Storage already contains suppliers, skipping seed.");
-    }
+    });
   } catch (error) {
-    console.error("Error seeding sample data:", error);
+    console.error("Error seeding database:", error);
   }
 }
 
