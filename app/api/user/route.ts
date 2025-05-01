@@ -1,29 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/auth";
+import { getUserFromToken } from "@/lib/auth";
 
 /**
  * GET /api/user
- * Returns the current user's data
+ * Returns the currently authenticated user
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await authenticateRequest(request);
-    
+    // Get user from JWT token
+    const user = await getUserFromToken(request);
+
     if (!user) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
       );
     }
-    
-    // Return user data without the password
-    const { password, ...userData } = user;
-    return NextResponse.json(userData);
+
+    // Return user data (without password)
+    const { password, ...userWithoutPassword } = user;
+    return NextResponse.json(userWithoutPassword);
   } catch (error) {
-    console.error("Error fetching user:", error);
+    console.error("Get user error:", error);
+    
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: "Authentication failed" },
+      { status: 401 }
     );
   }
 }

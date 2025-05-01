@@ -1,167 +1,122 @@
-"use client";
-
-import React, { ReactNode, useState } from "react";
+import { QueryClient, DefaultOptions } from "@tanstack/react-query";
+import { useState, ReactNode } from "react";
 import {
-  QueryClient,
-  QueryClientProvider,
-  QueryFunction,
+  QueryClientProvider as TanStackQueryClientProvider,
 } from "@tanstack/react-query";
-import { toast } from "@/hooks/use-toast";
 
-// Fetch API wrapper with improved error handling
-type ApiRequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+import { useToast } from "@/hooks/use-toast";
 
-interface ApiRequestOptions {
-  headers?: Record<string, string>;
-  on401?: "error" | "returnNull"; // Whether to throw an error or return null on 401
-  retry?: boolean;
-}
-
-// Standard API request function
-export async function apiRequest(
-  method: ApiRequestMethod,
-  url: string,
-  body?: any,
-  options: ApiRequestOptions = {}
-): Promise<Response> {
-  const { headers = {}, on401 = "error" } = options;
-
-  const config: RequestInit = {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    credentials: "include", // Important for cookies
-  };
-
-  if (body && method !== "GET") {
-    config.body = JSON.stringify(body);
-  }
-
-  try {
-    const response = await fetch(url, config);
-
-    // Handle API error responses
-    if (!response.ok) {
-      // Special handling for 401 Unauthorized
-      if (response.status === 401) {
-        if (on401 === "returnNull") {
-          return new Response(JSON.stringify(null), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-      }
-
-      // Attempt to parse the error response
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch (e) {
-        errorData = { error: response.statusText };
-      }
-
-      const errorMessage = errorData.error || errorData.message || "Request failed";
-      throw new Error(errorMessage);
-    }
-
-    return response;
-  } catch (error) {
-    if (error instanceof Error) {
-      // If it's already an Error instance, rethrow it
-      throw error;
-    } else {
-      // Otherwise, create a new Error
-      throw new Error("Network error occurred");
-    }
-  }
-}
-
-// Default query function that uses our apiRequest
-export const defaultQueryFn: QueryFunction = async ({ queryKey }) => {
-  if (!Array.isArray(queryKey) || queryKey.length === 0) {
-    throw new Error("Invalid query key");
-  }
-
-  const [url, ...params] = queryKey;
-  
-  if (typeof url !== "string") {
-    throw new Error("First element of queryKey must be a string URL");
-  }
-
-  // For GET requests with query parameters
-  let fullUrl = url;
-  if (params.length > 0 && typeof params[0] === "object") {
-    const queryParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(params[0])) {
-      if (value !== undefined && value !== null) {
-        queryParams.append(key, String(value));
-      }
-    }
-    const queryString = queryParams.toString();
-    if (queryString) {
-      fullUrl += (url.includes("?") ? "&" : "?") + queryString;
-    }
-  }
-
-  const response = await apiRequest("GET", fullUrl, undefined, {
-    on401: "returnNull",
-  });
-  
-  return response.json();
-};
-
-// Function to get query with options
-export const getQueryFn = 
-  (options: ApiRequestOptions = {}) => 
-  async ({ queryKey }: { queryKey: string[] }) => {
-    if (!Array.isArray(queryKey) || queryKey.length === 0) {
-      throw new Error("Invalid query key");
-    }
-
-    const [url] = queryKey;
-    const response = await apiRequest("GET", url, undefined, options);
-    return response.json();
-  };
-
-// Create a client
-export const queryClient = new QueryClient({
+// Create a client for the server
+export const serverQueryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000, // 1 minute
-      gcTime: 5 * 60 * 1000, // 5 minutes
       refetchOnWindowFocus: false,
-      retry: (failureCount, error) => {
-        // Don't retry on 404s or other client errors
-        if (error instanceof Error) {
-          if (error.message.includes("404") || error.message.includes("401")) {
-            return false;
-          }
-        }
-        return failureCount < 3;
-      },
-      queryFn: defaultQueryFn,
-    },
-    mutations: {
-      onError: (error) => {
-        if (error instanceof Error) {
-          toast({
-            title: "Error",
-            description: error.message,
-            variant: "destructive",
-          });
-        }
-      },
+      retry: false,
     },
   },
 });
 
-// Provider component
-export function QueryProvider({ children }: { children: ReactNode }) {
-  const [client] = useState(() => queryClient);
+// JSON fetch helper for API calls
+export async function apiRequest(
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
+  url: string,
+  data?: unknown
+) {
+  const options: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+  };
+
+  if (data) {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData.error || response.statusText || "Request failed";
+    
+    throw new Error(errorMessage);
+  }
+  
+  return response;
+}
+
+// Type for the request options
+export type QueryFetcherOptions = {
+  on401?: "throw" | "returnNull";
+};
+
+// Default fetcher function for useQuery hooks
+export function getQueryFn(options: QueryFetcherOptions = {}) {
+  const { on401 = "throw" } = options;
+  
+  return async ({ queryKey }: { queryKey: string[] }): Promise<any> => {
+    const url = queryKey[0];
+    
+    try {
+      const response = await apiRequest("GET", url);
+      
+      if (!response.bodyUsed) {
+        return await response.json();
+      }
+      
+      return null;
+    } catch (error) {
+      if (
+        on401 === "returnNull" &&
+        error instanceof Error &&
+        error.message.includes("Unauthorized")
+      ) {
+        return null;
+      }
+      
+      throw error;
+    }
+  };
+}
+
+// Common query client configuration
+const defaultOptions: DefaultOptions = {
+  queries: {
+    refetchOnWindowFocus: false,
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  },
+};
+
+// Client-side QueryClientProvider with error handling
+export function QueryClientProvider({ children }: { children: ReactNode }) {
+  const { toast } = useToast();
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions,
+        queryCache: {
+          onError: (error) => {
+            console.error(`Query error:`, error);
+            if (error instanceof Error) {
+              toast({
+                title: "Error",
+                description: error.message || "Something went wrong",
+                variant: "destructive",
+              });
+            }
+          },
+        },
+      })
+  );
 
   return (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <TanStackQueryClientProvider client={queryClient}>
+      {children}
+    </TanStackQueryClientProvider>
   );
 }
+
+// Export the queryClient for use in mutations, invalidations, etc.
+export const queryClient = serverQueryClient;

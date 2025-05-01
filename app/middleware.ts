@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/auth";
+import { verifyToken } from "@/lib/auth";
 
 /**
  * Middleware for Next.js app
@@ -7,46 +7,59 @@ import { authenticateRequest } from "@/lib/auth";
  * - Redirects unauthenticated users to login page
  */
 export async function middleware(request: NextRequest) {
-  // Get the pathname from the URL
-  const path = request.nextUrl.pathname;
+  const { pathname } = request.nextUrl;
   
-  // Define paths that don't require authentication
-  const isPublicPath = 
-    path === "/auth" || 
-    path.startsWith("/api/auth/") ||
-    path.startsWith("/_next") ||
-    path.startsWith("/favicon") ||
-    path.includes(".") || // Static files
-    path === "/";
-
-  // For API routes other than auth, we need to check authentication
-  // without redirecting (return 401 instead)
-  const isApiPath = path.startsWith("/api/") && !path.startsWith("/api/auth/");
-  
-  if (isPublicPath) {
+  // Allow public routes
+  if (
+    pathname === "/auth" ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/assets/") ||
+    pathname.startsWith("/images/") ||
+    pathname.endsWith(".ico") ||
+    pathname.endsWith(".svg") ||
+    pathname.endsWith(".png")
+  ) {
     return NextResponse.next();
   }
-  
-  // Check if the user is authenticated
-  const user = await authenticateRequest(request);
-  
-  // If API path and no user, return 401 Unauthorized
-  if (isApiPath && !user) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
-    );
+
+  // For API routes, return 401 error
+  if (pathname.startsWith("/api/")) {
+    try {
+      const isValid = await verifyToken(request);
+      
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          { status: 401 }
+        );
+      }
+      
+      return NextResponse.next();
+    } catch (error) {
+      console.error("Authentication error in middleware:", error);
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
   }
-  
-  // For non-API paths, redirect to login page if not authenticated
-  if (!user) {
-    const loginUrl = new URL("/auth", request.url);
-    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+
+  // For web pages, redirect to auth page
+  try {
+    const isValid = await verifyToken(request);
+    
+    if (isValid) {
+      return NextResponse.next();
+    }
+    
+    const url = new URL("/auth", request.url);
+    return NextResponse.redirect(url);
+  } catch (error) {
+    console.error("Authentication error in middleware:", error);
+    const url = new URL("/auth", request.url);
+    return NextResponse.redirect(url);
   }
-  
-  // User is authenticated, proceed to the requested page
-  return NextResponse.next();
 }
 
 /**
@@ -54,7 +67,12 @@ export async function middleware(request: NextRequest) {
  */
 export const config = {
   matcher: [
-    // Match all paths except static files and public routes
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico, sitemap.xml (common files)
+     */
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml).*)",
   ],
 };

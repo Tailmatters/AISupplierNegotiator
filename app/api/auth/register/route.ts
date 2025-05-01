@@ -1,49 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
+import { ZodError } from "zod";
+import { hashPassword, generateToken, setTokenCookie } from "@/lib/auth";
+import { insertUserSchema } from "@/schema";
 import { db } from "@/lib/db";
-import { hashPassword, generateToken, setAuthCookie } from "@/lib/auth";
-import { insertUserSchema, users } from "@/schema";
+import { users } from "@/schema";
 import { eq } from "drizzle-orm";
 
+/**
+ * POST /api/auth/register
+ * Registers a new user and creates a session
+ */
 export async function POST(request: NextRequest) {
   try {
+    // Parse and validate request body
     const body = await request.json();
-    
-    // Validate the request body
     const validatedData = insertUserSchema.parse(body);
-    
-    // Check if the username already exists
+
+    // Check if username already exists
     const existingUser = await db
-      .select({ id: users.id })
+      .select()
       .from(users)
-      .where(eq(users.username, validatedData.username))
-      .limit(1);
-    
+      .where(eq(users.username, validatedData.username));
+
     if (existingUser.length > 0) {
       return NextResponse.json(
         { error: "Username already exists" },
         { status: 400 }
       );
     }
-    
-    // Check if the email already exists
+
+    // Check if email already exists
     const existingEmail = await db
-      .select({ id: users.id })
+      .select()
       .from(users)
-      .where(eq(users.email, validatedData.email))
-      .limit(1);
-    
+      .where(eq(users.email, validatedData.email));
+
     if (existingEmail.length > 0) {
       return NextResponse.json(
         { error: "Email already exists" },
         { status: 400 }
       );
     }
-    
-    // Hash the password
+
+    // Hash password
     const hashedPassword = await hashPassword(validatedData.password);
-    
-    // Create the user
+
+    // Create user
     const [newUser] = await db
       .insert(users)
       .values({
@@ -51,36 +53,27 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
       })
       .returning();
-    
-    // Generate a JWT token
+
+    // Generate authentication token
     const token = await generateToken(newUser);
     
-    // Create the response
-    const response = NextResponse.json(
-      {
-        id: newUser.id,
-        username: newUser.username,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-      },
-      { status: 201 }
-    );
-    
-    // Set the auth cookie in the response
-    await setAuthCookie(response, token);
-    
-    return response;
+    // Set token in HTTP-only cookie
+    setTokenCookie(token);
+
+    // Return user data (without password)
+    const { password, ...userWithoutPassword } = newUser;
+    return NextResponse.json(userWithoutPassword, { status: 201 });
   } catch (error) {
     console.error("Registration error:", error);
-    
-    if (error instanceof z.ZodError) {
+
+    // Handle validation errors
+    if (error instanceof ZodError) {
       return NextResponse.json(
-        { error: "Validation error", details: error.errors },
+        { error: "Validation error", details: error.format() },
         { status: 400 }
       );
     }
-    
+
     return NextResponse.json(
       { error: "Registration failed" },
       { status: 500 }

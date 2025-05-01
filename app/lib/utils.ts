@@ -1,172 +1,94 @@
 import { ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { formatDistanceToNow, format } from "date-fns";
 
 /**
- * Combines multiple class names with tailwind merge
- * @param inputs Class values to merge
- * @returns Merged class string
+ * Combines class names and merges Tailwind CSS classes
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 /**
- * Formats a date as a relative time (e.g., "5 minutes ago")
- * @param date Date to format
- * @param options Formatting options
- * @returns Formatted date string
+ * Formats a currency amount with a currency symbol
  */
-export function formatRelativeTime(
-  date: Date | string | number,
-  options: { addSuffix?: boolean } = {}
-): string {
-  const { addSuffix = true } = options;
-  const dateObj = typeof date === "string" || typeof date === "number" 
-    ? new Date(date) 
-    : date;
-  
-  return formatDistanceToNow(dateObj, { addSuffix });
-}
-
-/**
- * Formats a date to a standard format
- * @param date Date to format
- * @param formatStr Format string (defaults to "MMM d, yyyy")
- * @returns Formatted date string
- */
-export function formatDate(
-  date: Date | string | number,
-  formatStr: string = "MMM d, yyyy"
-): string {
-  const dateObj = typeof date === "string" || typeof date === "number" 
-    ? new Date(date) 
-    : date;
-  
-  return format(dateObj, formatStr);
-}
-
-/**
- * Formats a currency value
- * @param amount Number to format
- * @param currency Currency code (defaults to USD)
- * @param locale Locale for formatting (defaults to en-US)
- * @returns Formatted currency string
- */
-export function formatCurrency(
-  amount: number,
-  currency: string = "USD",
-  locale: string = "en-US"
-): string {
-  return new Intl.NumberFormat(locale, {
+export function formatCurrency(amount: number, currency = "USD"): string {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
   }).format(amount);
 }
 
 /**
- * Formats a percentage value
- * @param value Number to format as percentage
- * @param decimals Number of decimal places
- * @returns Formatted percentage string
+ * Formats a date in a readable format
  */
-export function formatPercent(value: number, decimals: number = 1): string {
-  return `${(value * 100).toFixed(decimals)}%`;
+export function formatDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /**
- * Formats a number with thousand separators
- * @param value Number to format
- * @param locale Locale for formatting (defaults to en-US)
- * @returns Formatted number string
+ * Truncates a string if it's longer than the specified length
  */
-export function formatNumber(
-  value: number,
-  locale: string = "en-US"
-): string {
-  return new Intl.NumberFormat(locale).format(value);
+export function truncateString(str: string, length: number): string {
+  if (str.length <= length) return str;
+  return `${str.slice(0, length)}...`;
 }
 
 /**
- * Truncates a string to a maximum length
- * @param str String to truncate
- * @param maxLength Maximum length
- * @param ellipsis Ellipsis characters
- * @returns Truncated string
+ * Extracts the initials from a name
  */
-export function truncateString(
-  str: string,
-  maxLength: number = 50,
-  ellipsis: string = "..."
-): string {
-  if (!str || str.length <= maxLength) return str;
-  return `${str.slice(0, maxLength)}${ellipsis}`;
+export function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .substring(0, 2);
 }
 
 /**
- * Generates a random ID
- * @param length Length of the ID (default: 8)
- * @returns Random ID string
+ * Generates a simple ID for temporary usage
  */
-export function generateId(length: number = 8): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+export function generateId(): string {
+  return Math.random().toString(36).substring(2, 9);
 }
 
 /**
- * Debounces a function
- * @param fn Function to debounce
- * @param ms Debounce delay in milliseconds
- * @returns Debounced function
+ * Format percentage with appropriate sign and decimals
+ */
+export function formatPercentage(value: number, decimals = 1): string {
+  const formatted = value.toFixed(decimals);
+  return value > 0 ? `+${formatted}%` : `${formatted}%`;
+}
+
+/**
+ * Calculate savings percentage from original and new price
+ */
+export function calculateSavings(originalPrice: number, newPrice: number): number {
+  if (originalPrice === 0) return 0;
+  return ((originalPrice - newPrice) / originalPrice) * 100;
+}
+
+/**
+ * Debounce a function
  */
 export function debounce<T extends (...args: any[]) => any>(
-  fn: T,
-  ms: number
+  func: T,
+  wait: number
 ): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout>;
-  return function (...args: Parameters<T>) {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), ms);
+  let timeout: NodeJS.Timeout | null = null;
+  
+  return function(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+    
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
   };
-}
-
-/**
- * Groups an array of objects by a key
- * @param array Array to group
- * @param key Key to group by
- * @returns Grouped object
- */
-export function groupBy<T extends Record<string, any>>(
-  array: T[],
-  key: keyof T
-): Record<string, T[]> {
-  return array.reduce((result, item) => {
-    const groupKey = String(item[key]);
-    result[groupKey] = result[groupKey] || [];
-    result[groupKey].push(item);
-    return result;
-  }, {} as Record<string, T[]>);
-}
-
-/**
- * Calculates the sum of an array of numbers
- * @param array Array of numbers
- * @returns Sum of the array
- */
-export function sum(array: number[]): number {
-  return array.reduce((acc, val) => acc + val, 0);
-}
-
-/**
- * Calculates the average of an array of numbers
- * @param array Array of numbers
- * @returns Average of the array
- */
-export function average(array: number[]): number {
-  if (array.length === 0) return 0;
-  return sum(array) / array.length;
 }

@@ -1,157 +1,163 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { db } from "@/lib/db";
 import { User, users } from "@/schema";
-import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { eq } from "drizzle-orm";
+import { randomBytes, scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 
-// Use promisify to convert callback-based scrypt to Promise-based
+// Constants for JWT handling
+const JWT_SECRET = process.env.SESSION_SECRET || "default-secret-key-change-in-production";
+const TOKEN_NAME = "auth_token";
+const TOKEN_EXPIRY = "24h";
+
+// Use promisify to convert callback-based functions to promise-based
 const scryptAsync = promisify(scrypt);
 
-// JWT token settings
-const JWT_SECRET = process.env.SESSION_SECRET || "your-secret-key";
-const TOKEN_NAME = "auth-token";
-const EXPIRATION = 60 * 60 * 24 * 7; // 7 days in seconds
-
-// Password hashing
+/**
+ * Hash a password using scrypt
+ * @param password The plain text password to hash
+ * @returns A string in the format "hash.salt"
+ */
 export async function hashPassword(password: string): Promise<string> {
+  // Generate a random salt
   const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
+  
+  // Hash the password with the salt
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  
+  // Return the hash and salt together
+  return `${derivedKey.toString("hex")}.${salt}`;
 }
 
+/**
+ * Compare a plain text password with a stored hashed password
+ * @param plainPassword The plain text password to verify
+ * @param hashedPassword The stored hashed password (in "hash.salt" format)
+ * @returns True if the password matches, false otherwise
+ */
 export async function comparePasswords(
-  supplied: string,
-  stored: string
+  plainPassword: string,
+  hashedPassword: string
 ): Promise<boolean> {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
+  // Split the hash and salt
+  const [hash, salt] = hashedPassword.split(".");
+  
+  // Hash the plain password with the same salt
+  const derivedKey = (await scryptAsync(plainPassword, salt, 64)) as Buffer;
+  
+  // Compare the hashes in constant time (to prevent timing attacks)
+  return timingSafeEqual(
+    Buffer.from(hash, "hex"),
+    derivedKey
+  );
 }
 
-// Token generation
+/**
+ * Generate a JWT token for a user
+ * @param user The user to generate a token for
+ * @returns The JWT token
+ */
 export async function generateToken(user: User): Promise<string> {
-  const { password, ...userWithoutPassword } = user;
-
-  // Create a JWT that expires in 7 days
-  const token = await new SignJWT({ ...userWithoutPassword })
+  const { password, ...userPayload } = user;
+  
+  return new SignJWT(userPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRATION)
+    .setExpirationTime(TOKEN_EXPIRY)
     .sign(new TextEncoder().encode(JWT_SECRET));
-
-  return token;
 }
 
-// Set token in cookies
-export function setTokenCookie(token: string) {
-  const cookieStore = cookies();
-  
-  cookieStore.set(TOKEN_NAME, token, {
+/**
+ * Set the token cookie in the response
+ * @param token The JWT token to set in the cookie
+ */
+export async function setTokenCookie(token: string): Promise<void> {
+  cookies().set({
+    name: TOKEN_NAME,
+    value: token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: EXPIRATION,
     path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 24, // 24 hours in seconds
+    sameSite: "lax",
   });
 }
 
-// Clear auth cookie
-export function clearTokenCookie() {
-  const cookieStore = cookies();
-  
-  cookieStore.set(TOKEN_NAME, "", {
+/**
+ * Clear the token cookie
+ */
+export async function clearTokenCookie(): Promise<void> {
+  cookies().set({
+    name: TOKEN_NAME,
+    value: "",
     httpOnly: true,
+    path: "/",
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
     maxAge: 0,
-    path: "/",
+    sameSite: "lax",
   });
 }
 
-// Verify token
-export async function verifyToken(token: string): Promise<User | null> {
+/**
+ * Verify a JWT token from the request
+ * @param request The NextRequest object
+ * @returns True if the token is valid, false otherwise
+ */
+export async function verifyToken(request: NextRequest): Promise<boolean> {
   try {
-    const verified = await jwtVerify(
+    const token = request.cookies.get(TOKEN_NAME)?.value;
+    
+    if (!token) {
+      return false;
+    }
+    
+    // Verify the token
+    await jwtVerify(
       token,
       new TextEncoder().encode(JWT_SECRET)
     );
-
-    return verified.payload as unknown as User;
+    
+    return true;
   } catch (error) {
-    console.error("Token verification failed:", error);
-    return null;
+    console.error("Token verification error:", error);
+    return false;
   }
 }
 
-// Authenticate user from request
-export async function authenticateRequest(
-  request: NextRequest
-): Promise<User | null> {
+/**
+ * Get the user from the token in the request
+ * @param request The NextRequest object
+ * @returns The user if found and valid, null otherwise
+ */
+export async function getUserFromToken(request: NextRequest): Promise<User | null> {
   try {
-    // Check for token in cookies
     const token = request.cookies.get(TOKEN_NAME)?.value;
     
     if (!token) {
       return null;
     }
-
-    // Verify token
-    const user = await verifyToken(token);
     
-    if (!user) {
+    // Verify and decode the token
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(JWT_SECRET)
+    );
+    
+    if (!payload.id) {
       return null;
     }
-
-    return user;
+    
+    // Get the user from the database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, payload.id as number));
+    
+    return user || null;
   } catch (error) {
-    console.error("Authentication error:", error);
+    console.error("Get user from token error:", error);
     return null;
-  }
-}
-
-// User database operations
-export async function getUserByUsername(username: string): Promise<User | undefined> {
-  try {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username));
-    
-    return user;
-  } catch (error) {
-    console.error("Error getting user by username:", error);
-    return undefined;
-  }
-}
-
-export async function getUserByEmail(email: string): Promise<User | undefined> {
-  try {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email));
-    
-    return user;
-  } catch (error) {
-    console.error("Error getting user by email:", error);
-    return undefined;
-  }
-}
-
-export async function getUserById(id: number): Promise<User | undefined> {
-  try {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, id));
-    
-    return user;
-  } catch (error) {
-    console.error("Error getting user by id:", error);
-    return undefined;
   }
 }

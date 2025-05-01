@@ -1,60 +1,70 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { comparePasswords, generateToken, setAuthCookie } from "@/lib/auth";
-import { loginSchema, users } from "@/schema";
+import { ZodError } from "zod";
+import { comparePasswords, generateToken, setTokenCookie } from "@/lib/auth";
+import { loginSchema } from "@/schema";
 import { db } from "@/lib/db";
+import { users } from "@/schema";
 import { eq } from "drizzle-orm";
 
+/**
+ * POST /api/auth/login
+ * Authenticates a user and creates a session
+ */
 export async function POST(request: NextRequest) {
   try {
+    // Parse and validate request body
     const body = await request.json();
-    
-    // Validate the request body
-    const { username, password } = loginSchema.parse(body);
-    
-    // Find the user by username
+    const validatedData = loginSchema.parse(body);
+
+    // Find user by username
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.username, username))
-      .limit(1);
-    
-    // Check if the user exists and the password is correct
-    if (!user || !(await comparePasswords(password, user.password))) {
+      .where(eq(users.username, validatedData.username));
+
+    // Check if user exists
+    if (!user) {
       return NextResponse.json(
         { error: "Invalid username or password" },
         { status: 401 }
       );
     }
-    
-    // Generate a JWT token
+
+    // Verify password
+    const passwordValid = await comparePasswords(
+      validatedData.password,
+      user.password
+    );
+
+    if (!passwordValid) {
+      return NextResponse.json(
+        { error: "Invalid username or password" },
+        { status: 401 }
+      );
+    }
+
+    // Generate authentication token
     const token = await generateToken(user);
     
-    // Create a successful response without the password
-    const response = NextResponse.json({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
-    
-    // Set the auth cookie
-    await setAuthCookie(response, token);
-    
-    return response;
+    // Set token in HTTP-only cookie
+    setTokenCookie(token);
+
+    // Return user data (without password)
+    const { password, ...userWithoutPassword } = user;
+    return NextResponse.json(userWithoutPassword);
   } catch (error) {
     console.error("Login error:", error);
-    
-    if (error instanceof z.ZodError) {
+
+    // Handle validation errors
+    if (error instanceof ZodError) {
       return NextResponse.json(
-        { error: "Validation error", details: error.errors },
+        { error: "Validation error", details: error.format() },
         { status: 400 }
       );
     }
-    
+
     return NextResponse.json(
-      { error: "Login failed" },
+      { error: "Authentication failed" },
       { status: 500 }
     );
   }
