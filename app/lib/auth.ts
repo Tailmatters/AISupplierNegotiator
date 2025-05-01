@@ -1,131 +1,115 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { SignJWT, jwtVerify } from 'jose'
-import { compare, hash } from 'bcrypt'
-import { db } from '@/lib/db'
-import { users } from '@/schema'
-import { eq } from 'drizzle-orm'
+import { cookies } from "next/headers"
+import { NextRequest, NextResponse } from "next/server"
+import { SignJWT, jwtVerify } from "jose"
+import { db } from "@/lib/db"
+import { users, type User } from "@/schema"
+import { eq } from "drizzle-orm"
+import bcrypt from "bcryptjs"
 
-// JWT secret key for signing/verifying tokens
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || 'fallback-secret-key-for-development-only'
-)
+// Token expiration
+const TOKEN_EXPIRATION = "8h"
 
-// Authentication cookie name and options
-const AUTH_COOKIE = 'auth-token'
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
-  maxAge: 60 * 60 * 24 * 7, // 1 week
-  path: '/',
-}
+// Authentication token cookie name
+export const AUTH_COOKIE = "auth_token"
 
-/**
- * Token payload for JWT
- */
-interface JWTPayload {
+// Secret key for JWT signing
+const JWT_SECRET = process.env.SESSION_SECRET || "a-very-secret-key-that-should-be-in-env"
+
+// User payload for JWT
+export interface JWTPayload {
   id: number
   username: string
   email: string
   name: string
   role: string
-  iat?: number
-  exp?: number
 }
 
 /**
- * Create a JWT token with user data
- * @param payload User data for token
- * @returns Signed JWT token
- */
-export async function createToken(payload: JWTPayload): Promise<string> {
-  try {
-    const token = await new SignJWT(payload)
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('7d') // Expires in 7 days
-      .sign(JWT_SECRET)
-
-    return token
-  } catch (error) {
-    console.error('Failed to create token:', error)
-    throw new Error('Authentication token generation failed')
-  }
-}
-
-/**
- * Verify a JWT token
- * @param token JWT token to verify
- * @returns Token payload if valid
- */
-export async function verifyToken(token: string): Promise<JWTPayload | null> {
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET)
-    return payload as JWTPayload
-  } catch (error) {
-    console.error('Token verification failed:', error)
-    return null
-  }
-}
-
-/**
- * Hash a password with bcrypt
+ * Generate a hashed password
  * @param password Plain text password
  * @returns Hashed password
  */
 export async function hashPassword(password: string): Promise<string> {
-  return hash(password, 10)
+  return bcrypt.hash(password, 10)
 }
 
 /**
- * Compare a password with a hash
+ * Compare plain text password with hashed password
  * @param plainPassword Plain text password
  * @param hashedPassword Hashed password
- * @returns True if match, false otherwise
+ * @returns Whether passwords match
  */
 export async function comparePasswords(
   plainPassword: string,
   hashedPassword: string
 ): Promise<boolean> {
-  return compare(plainPassword, hashedPassword)
+  return bcrypt.compare(plainPassword, hashedPassword)
 }
 
 /**
- * Set authentication cookie in response
- * @param response NextResponse object
+ * Create a JWT token for a user
+ * @param user User object
+ * @returns JWT token
+ */
+export async function createToken(user: JWTPayload): Promise<string> {
+  const token = await new SignJWT({
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(TOKEN_EXPIRATION)
+    .sign(new TextEncoder().encode(JWT_SECRET))
+
+  return token
+}
+
+/**
+ * Verify a JWT token
  * @param token JWT token
+ * @returns User payload or null if invalid
  */
-export function setAuthCookie(response: NextResponse, token: string): void {
-  response.cookies.set(AUTH_COOKIE, token, COOKIE_OPTIONS)
-}
-
-/**
- * Clear authentication cookie from response
- * @param response NextResponse object
- */
-export function clearAuthCookie(response: NextResponse): void {
-  response.cookies.delete(AUTH_COOKIE)
-}
-
-/**
- * Get authenticated user from request
- * @param request NextRequest object
- * @returns User object if authenticated, null otherwise
- */
-export async function getAuthUser(request: NextRequest) {
+export async function verifyToken(token: string): Promise<JWTPayload | null> {
   try {
-    // Get token from cookie
-    const token = request.cookies.get(AUTH_COOKIE)?.value
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(JWT_SECRET)
+    )
+    
+    return payload as JWTPayload
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * Get the current user from the JWT token
+ * @param req Next.js request object
+ * @returns User object or null if not authenticated
+ */
+export async function getCurrentUser(req?: NextRequest): Promise<User | null> {
+  try {
+    // Get token from cookies (server-side)
+    let token: string | undefined
+    
+    if (req) {
+      // For middleware use
+      token = req.cookies.get(AUTH_COOKIE)?.value
+    } else {
+      // For route handlers and server components
+      const cookieStore = cookies()
+      token = cookieStore.get(AUTH_COOKIE)?.value
+    }
     
     if (!token) {
       return null
     }
     
-    // Verify token
     const payload = await verifyToken(token)
-    
-    if (!payload?.id) {
+    if (!payload) {
       return null
     }
     
@@ -135,24 +119,89 @@ export async function getAuthUser(request: NextRequest) {
       .from(users)
       .where(eq(users.id, payload.id))
     
-    return user || null
+    if (!user) {
+      return null
+    }
+    
+    return user
   } catch (error) {
-    console.error('Auth user retrieval failed:', error)
+    console.error("Error getting current user:", error)
     return null
   }
 }
 
 /**
- * Get authentication token from request cookies
- * @returns Token if present, null otherwise
+ * Set an authentication cookie in the response
+ * @param token JWT token
+ * @param response NextResponse object
  */
-export async function getAuthToken(): Promise<string | null> {
+export function setAuthCookie(token: string, response: NextResponse): void {
+  response.cookies.set({
+    name: AUTH_COOKIE,
+    value: token,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 8, // 8 hours in seconds
+  })
+}
+
+/**
+ * Clear the authentication cookie
+ * @param response NextResponse object
+ */
+export function clearAuthCookie(response: NextResponse): void {
+  response.cookies.set({
+    name: AUTH_COOKIE,
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0, // Expire immediately
+  })
+}
+
+/**
+ * Get the JWT token from request cookies
+ * @param req NextRequest object
+ * @returns JWT token or null if not found
+ */
+export function getTokenFromRequest(req: NextRequest): string | null {
+  const token = req.cookies.get(AUTH_COOKIE)?.value
+  return token || null
+}
+
+/**
+ * Update a user's password
+ * @param userId User ID
+ * @param newPassword New password (plain text)
+ * @returns Whether password was updated successfully
+ */
+export async function updateUserPassword(
+  userId: number,
+  newPassword: string
+): Promise<boolean> {
   try {
-    const cookieStore = cookies()
-    const token = cookieStore.get(AUTH_COOKIE)?.value
-    return token || null
+    const hashedPassword = await hashPassword(newPassword)
+    
+    await db
+      .update(users)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+    
+    return true
   } catch (error) {
-    console.error('Failed to get auth token:', error)
-    return null
+    console.error("Error updating user password:", error)
+    return false
   }
+}
+
+/**
+ * Get user cookie from server component
+ * @returns JWT token from cookies
+ */
+export async function getUserCookie(): Promise<string | undefined> {
+  return cookies().get(AUTH_COOKIE)?.value
 }

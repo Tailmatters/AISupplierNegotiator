@@ -1,26 +1,33 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser } from '@/lib/auth'
+import { NextRequest, NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth"
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    // Get authenticated user
-    const user = await getAuthUser(request)
+    const user = await getCurrentUser(req)
     
     if (!user) {
       return NextResponse.json(
-        { error: 'Not authenticated' },
+        { error: "Not authenticated" },
         { status: 401 }
       )
     }
     
-    // Return user data without password
-    const { password: _, ...userData } = user
-    
-    return NextResponse.json(userData, { status: 200 })
+    return NextResponse.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      avatar: user.avatar,
+      company: user.company,
+      title: user.title,
+      phone: user.phone,
+      preferences: user.preferences,
+    })
   } catch (error) {
-    console.error('User retrieval error:', error)
+    console.error("Error getting user:", error)
     return NextResponse.json(
-      { error: 'Failed to get user data', message: error.message },
+      { error: "An error occurred while getting user data" },
       { status: 500 }
     )
   }

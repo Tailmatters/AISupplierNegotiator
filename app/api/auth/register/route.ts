@@ -1,67 +1,68 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
+import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
+import { db } from "@/lib/db"
+import { hashPassword, createToken, setAuthCookie } from "@/lib/auth"
+import { users, insertUserSchema, type User } from "@/schema"
+import { eq } from "drizzle-orm"
 
-import { db } from '@/lib/db'
-import { hashPassword, createToken, setAuthCookie } from '@/lib/auth'
-import { users, insertUserSchema } from '@/schema'
+// Validation schema for registration
+const registerSchema = insertUserSchema
+  .extend({
+    confirmPassword: z.string().min(1, "Confirm password is required"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  })
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // Parse request body
-    const body = await request.json()
+    const body = await req.json()
     
-    // Validate request body
-    const result = insertUserSchema.safeParse(body)
+    // Validate request
+    const result = registerSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { error: 'Invalid request', issues: result.error.issues },
+        { error: "Invalid request", details: result.error.format() },
         { status: 400 }
       )
     }
     
-    const userData = result.data
+    const { confirmPassword, ...userData } = result.data
     
     // Check if username already exists
-    const [existingUser] = await db
-      .select({ id: users.id })
+    const existingUsername = await db
+      .select()
       .from(users)
       .where(eq(users.username, userData.username))
     
-    if (existingUser) {
+    if (existingUsername.length > 0) {
       return NextResponse.json(
-        { error: 'Username already exists' },
-        { status: 409 }
+        { error: "Username already exists" },
+        { status: 400 }
       )
     }
     
     // Check if email already exists
-    if (userData.email) {
-      const [existingEmail] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.email, userData.email))
-      
-      if (existingEmail) {
-        return NextResponse.json(
-          { error: 'Email already exists' },
-          { status: 409 }
-        )
-      }
+    const existingEmail = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, userData.email))
+    
+    if (existingEmail.length > 0) {
+      return NextResponse.json(
+        { error: "Email already exists" },
+        { status: 400 }
+      )
     }
     
     // Hash password
     const hashedPassword = await hashPassword(userData.password)
     
-    // Insert user into database
+    // Create user
     const [newUser] = await db
       .insert(users)
-      .values({
-        ...userData,
-        password: hashedPassword,
-        role: userData.role || 'buyer',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
+      .values({ ...userData, password: hashedPassword })
       .returning()
     
     // Create JWT token
@@ -73,20 +74,25 @@ export async function POST(request: NextRequest) {
       role: newUser.role,
     })
     
-    // Prepare user data (exclude password)
-    const { password: _, ...safeUserData } = newUser
-    
     // Create response
-    const response = NextResponse.json(safeUserData, { status: 201 })
+    const response = NextResponse.json({
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
+      },
+    })
     
     // Set auth cookie
-    setAuthCookie(response, token)
+    setAuthCookie(token, response)
     
     return response
   } catch (error) {
-    console.error('Registration error:', error)
+    console.error("Registration error:", error)
     return NextResponse.json(
-      { error: 'Registration failed', message: error.message },
+      { error: "An error occurred during registration" },
       { status: 500 }
     )
   }

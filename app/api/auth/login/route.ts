@@ -1,27 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
+import { compare } from "bcryptjs"
+import { db } from "@/lib/db"
+import { createToken, setAuthCookie } from "@/lib/auth"
+import { users, type User } from "@/schema"
+import { eq } from "drizzle-orm"
 
-import { db } from '@/lib/db'
-import { createToken, comparePasswords, setAuthCookie } from '@/lib/auth'
-import { users } from '@/schema'
-
-// Login validation schema
+// Validation schema for login request
 const loginSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
 })
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // Parse request body
-    const body = await request.json()
+    const body = await req.json()
     
-    // Validate request body
+    // Validate request
     const result = loginSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { error: 'Invalid request', issues: result.error.issues },
+        { error: "Invalid request", details: result.error.format() },
         { status: 400 }
       )
     }
@@ -34,15 +33,29 @@ export async function POST(request: NextRequest) {
       .from(users)
       .where(eq(users.username, username))
     
-    // Check if user exists and password is correct
-    if (!user || !(await comparePasswords(password, user.password))) {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Invalid username or password' },
+        { error: "Invalid username or password" },
         { status: 401 }
       )
     }
     
-    // Create JWT token with user data
+    // Verify password
+    const isPasswordValid = await compare(password, user.password)
+    if (!isPasswordValid) {
+      return NextResponse.json(
+        { error: "Invalid username or password" },
+        { status: 401 }
+      )
+    }
+    
+    // Update last login time
+    await db
+      .update(users)
+      .set({ lastLogin: new Date() })
+      .where(eq(users.id, user.id))
+    
+    // Create JWT token
     const token = await createToken({
       id: user.id,
       username: user.username,
@@ -51,20 +64,25 @@ export async function POST(request: NextRequest) {
       role: user.role,
     })
     
-    // Prepare user data (exclude password)
-    const { password: _, ...userData } = user
-    
     // Create response
-    const response = NextResponse.json(userData, { status: 200 })
+    const response = NextResponse.json({
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    })
     
     // Set auth cookie
-    setAuthCookie(response, token)
+    setAuthCookie(token, response)
     
     return response
   } catch (error) {
-    console.error('Login error:', error)
+    console.error("Login error:", error)
     return NextResponse.json(
-      { error: 'Authentication failed', message: error.message },
+      { error: "An error occurred during login" },
       { status: 500 }
     )
   }
