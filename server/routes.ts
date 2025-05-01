@@ -321,12 +321,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Parse JSON from form data
       const negotiationData = {
         title: req.body.title,
-        category: req.body.category,
+        categoryId: req.body.categoryId ? parseInt(req.body.categoryId) : null,
         objectives: req.body.objectives,
         supplierId: parseInt(req.body.supplierId),
         status: 'pending',
         pastDataFilePath: pastDataFilePath,
-        createdBy: req.user!.id
+        userId: req.user!.id
       };
       
       const validatedData = insertNegotiationSchema.parse(negotiationData);
@@ -334,9 +334,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Analyze past data if available
       let analysis = null;
+      // Get category name from categoryId if available
+      let categoryName = "Uncategorized";
+      if (negotiation.categoryId) {
+        try {
+          const category = await storage.getCategory(negotiation.categoryId);
+          if (category) {
+            categoryName = category.name;
+          }
+        } catch (err) {
+          console.error("Error fetching category:", err);
+          // Continue even if category lookup fails
+        }
+      }
+      
       if (pastDataContent) {
         try {
-          analysis = await analyzePastNegotiations(pastDataContent, negotiation.category);
+          analysis = await analyzePastNegotiations(pastDataContent, categoryName);
         } catch (err) {
           console.error("Error analyzing past data:", err);
           // Continue even if analysis fails
@@ -356,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             const initialMessage = await generateInitialMessage(
               supplier.name,
-              negotiation.category,
+              categoryName,
               negotiation.objectives,
               analysis || {
                 priceInsights: "No historical data available.",
@@ -411,7 +425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized to view this negotiation
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to view this negotiation" });
       }
       
@@ -437,7 +451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized to view messages
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to view messages" });
       }
       
@@ -460,7 +474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to submit feedback for this negotiation" });
       }
       
@@ -507,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to conclude this negotiation" });
       }
       
@@ -593,7 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to request further negotiation" });
       }
       
@@ -716,7 +730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized to send messages
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to send messages to this negotiation" });
       }
       
