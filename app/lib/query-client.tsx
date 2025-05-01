@@ -1,109 +1,105 @@
 "use client"
 
-import { ReactNode } from "react"
+import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 
-// HTTP Method types
-type HTTPMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-
-// Options for fetch function with on401 behavior
-type FetchOptions = RequestInit & {
-  on401?: "throw" | "returnNull"
-}
-
 /**
- * Create a query client with default options
- */
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000, // 1 minute
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-})
-
-/**
- * Make an API request with proper error handling
- * @param method HTTP method
+ * Custom API request function that handles common request configurations
+ * @param method HTTP method (GET, POST, PUT, DELETE, etc)
  * @param url API endpoint URL
- * @param data Request body (will be JSON.stringified)
- * @param options Additional fetch options
- * @returns Response object
+ * @param body Optional request body for POST/PUT requests
+ * @returns Response object from fetch
  */
 export async function apiRequest(
-  method: HTTPMethod,
+  method: string,
   url: string,
-  data?: any,
-  options?: RequestInit
+  body?: any
 ): Promise<Response> {
-  const headers = {
-    "Content-Type": "application/json",
-    ...options?.headers,
-  }
-  
-  const config: RequestInit = {
+  const options: RequestInit = {
     method,
-    headers,
-    credentials: "include", // Important for cookies
-    ...options,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
   }
-  
-  if (data && method !== "GET") {
-    config.body = JSON.stringify(data)
+
+  if (body) {
+    options.body = JSON.stringify(body)
   }
-  
-  return fetch(url, config)
+
+  const response = await fetch(url, options)
+
+  // Handle unauthorized responses
+  if (response.status === 401) {
+    throw new Error("Authentication required")
+  }
+
+  // Handle other error responses
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(error || `Error ${response.status}: ${response.statusText}`)
+  }
+
+  return response
 }
 
 /**
- * Create a fetch function for TanStack Query
- * @param options Fetch options with 401 behavior
- * @returns Query function
+ * Default query function for React Query
+ * @param options Configuration options for the query
+ * @returns Function to perform the API request
  */
-export function getQueryFn(options?: FetchOptions) {
-  return async function fetchData<T>({ queryKey }: { queryKey: string[] }): Promise<T | null> {
-    const [url] = queryKey
-    
+export function getQueryFn({ on401 = "throw" }: { on401?: "throw" | "returnNull" } = {}) {
+  return async ({ queryKey }: { queryKey: string[] }) => {
     try {
-      const res = await fetch(url, {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        ...options,
-      })
-      
-      // Handle 401 Unauthorized based on options
-      if (res.status === 401) {
-        if (options?.on401 === "returnNull") {
-          return null
-        }
-        throw new Error("Unauthorized")
+      const [url] = queryKey
+      const response = await apiRequest("GET", url)
+      return await response.json()
+    } catch (error: any) {
+      if (error.message === "Authentication required" && on401 === "returnNull") {
+        return null
       }
-      
-      if (!res.ok) {
-        throw new Error(`API Error: ${res.statusText}`)
-      }
-      
-      return res.json()
-    } catch (error) {
-      console.error(`Error fetching ${url}:`, error)
       throw error
     }
   }
 }
 
 /**
- * React Query client provider component
+ * Creates a query client with default configuration
+ * @returns Configured QueryClient instance
  */
-export function ReactQueryProvider({ children }: { children: ReactNode }) {
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        gcTime: 10 * 60 * 1000, // 10 minutes
+        refetchOnWindowFocus: false,
+        retry: 1,
+        queryFn: getQueryFn(),
+      },
+    },
+  })
+}
+
+// Export singleton instance for imperative usages
+export const queryClient = createQueryClient()
+
+/**
+ * React Query provider component
+ * Provides the query client to the application
+ */
+export function ReactQueryProvider({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const [client] = React.useState(() => createQueryClient())
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={client}>
       {children}
-      {process.env.NODE_ENV === "development" && <ReactQueryDevtools />}
+      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   )
 }
