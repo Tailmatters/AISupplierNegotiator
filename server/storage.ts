@@ -1,15 +1,12 @@
-import { 
-  User, InsertUser, Supplier, InsertSupplier, 
+import {
+  User, InsertUser, Supplier, InsertSupplier,
   Negotiation, InsertNegotiation, Message, InsertMessage,
-  Invitation, InsertInvitation, Proposal, InsertProposal,
   ContractTemplate, InsertContractTemplate, Contract, InsertContract,
-  SpendUpload, InsertSpendUpload, SpendData, InsertSpendData,
-  ApiConnection, InsertApiConnection,
-  Dashboard, InsertDashboard, DashboardWidget, InsertDashboardWidget, WidgetType,
-  users, suppliers, negotiations, messages, invitations, proposals,
-  contractTemplates, contracts, spendUploads, spendData, apiConnections,
-  dashboards, dashboardWidgets, widgetTypes
-} from "@shared/schema";
+  SpendUpload, InsertSpendUpload, SpendEntry as SpendData, InsertSpendEntry as InsertSpendData,
+  DashboardWidget, InsertDashboardWidget,
+  users, suppliers, negotiations, messages,
+  contractTemplates, contracts, spendUploads, spendData, dashboardWidgets
+} from "../app/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";

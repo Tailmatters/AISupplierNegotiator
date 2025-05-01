@@ -1,94 +1,153 @@
-import { ClassValue, clsx } from "clsx";
+import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
- * Combines class names and merges Tailwind CSS classes
+ * Combine class names using clsx and tailwind-merge
+ * This allows conditional classes and handles tailwind conflicts properly
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 /**
- * Formats a currency amount with a currency symbol
+ * Format currency with proper symbol and localization
  */
-export function formatCurrency(amount: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
+export function formatCurrency(
+  amount: number,
+  currency = "USD",
+  locale = "en-US"
+) {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
   }).format(amount);
 }
 
 /**
- * Formats a date in a readable format
+ * Format a date string or Date object into a readable format
  */
-export function formatDate(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
+export function formatDate(
+  date: Date | string,
+  options: Intl.DateTimeFormatOptions = {
+    month: "long",
     day: "numeric",
-  });
+    year: "numeric",
+  }
+) {
+  if (!date) return "";
+
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-US", options).format(d);
 }
 
 /**
- * Truncates a string if it's longer than the specified length
+ * Format a percentage with the proper symbol
  */
-export function truncateString(str: string, length: number): string {
-  if (str.length <= length) return str;
-  return `${str.slice(0, length)}...`;
+export function formatPercentage(value: number, decimals = 1) {
+  return `${value.toFixed(decimals)}%`;
 }
 
 /**
- * Extracts the initials from a name
+ * Get initials from a name
  */
-export function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase()
-    .substring(0, 2);
+export function getInitials(name: string) {
+  if (!name) return "?";
+  
+  const parts = name.split(" ");
+  if (parts.length === 1) return name.substring(0, 2).toUpperCase();
+  
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 /**
- * Generates a simple ID for temporary usage
+ * Truncate a string to a specific length
  */
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9);
+export function truncateString(str: string, length: number) {
+  if (!str || str.length <= length) return str;
+  return `${str.substring(0, length)}...`;
 }
 
 /**
- * Format percentage with appropriate sign and decimals
+ * Create a slug from a string
  */
-export function formatPercentage(value: number, decimals = 1): string {
-  const formatted = value.toFixed(decimals);
-  return value > 0 ? `+${formatted}%` : `${formatted}%`;
+export function slugify(str: string) {
+  return str
+    .toLowerCase()
+    .replace(/[^\w ]+/g, "")
+    .replace(/ +/g, "-");
 }
 
 /**
- * Calculate savings percentage from original and new price
+ * Generate a random token string
  */
-export function calculateSavings(originalPrice: number, newPrice: number): number {
-  if (originalPrice === 0) return 0;
-  return ((originalPrice - newPrice) / originalPrice) * 100;
+export function generateRandomToken(length: number = 32) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  const charactersLength = chars.length;
+  
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  
+  return result;
+}
+
+/**
+ * Calculate the difference between two dates in days
+ */
+export function daysBetween(date1: Date, date2: Date) {
+  const oneDay = 24 * 60 * 60 * 1000; // hours*minutes*seconds*milliseconds
+  const diffDays = Math.round(Math.abs((date1.getTime() - date2.getTime()) / oneDay));
+  return diffDays;
+}
+
+/**
+ * Sleep/wait for a specific amount of time
+ */
+export function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Check if an object is empty
+ */
+export function isEmptyObject(obj: Record<string, any>) {
+  return Object.keys(obj).length === 0;
+}
+
+/**
+ * Parse a JSON string safely (without throwing)
+ */
+export function safeJsonParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+/**
+ * Get a random item from an array
+ */
+export function getRandomItem<T>(array: T[]): T {
+  return array[Math.floor(Math.random() * array.length)];
 }
 
 /**
  * Debounce a function
  */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-  
-  return function(...args: Parameters<T>) {
-    const later = () => {
-      timeout = null;
-      func(...args);
-    };
-    
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
+export function debounce<F extends (...args: any[]) => any>(
+  func: F,
+  waitFor: number
+) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = (...args: Parameters<F>) => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(() => func(...args), waitFor);
   };
+
+  return debounced as (...args: Parameters<F>) => ReturnType<F>;
 }

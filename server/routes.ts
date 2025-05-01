@@ -24,7 +24,7 @@ import { dirname } from 'path';
 // Get current file path and directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertInvitationSchema, insertProposalSchema, insertContractTemplateSchema, insertContractSchema, insertSpendUploadSchema, insertSpendDataSchema, insertApiConnectionSchema, insertDashboardSchema, insertDashboardWidgetSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier, InsertSpendUpload, InsertSpendData, InsertApiConnection, InsertDashboard, InsertDashboardWidget } from "@shared/schema";
+import { insertNegotiationSchema, insertSupplierSchema, insertMessageSchema, insertContractTemplateSchema, insertContractSchema, insertSpendUploadSchema, insertSpendDataSchema, insertDashboardWidgetSchema, InsertContractTemplate, InsertContract, InsertMessage, InsertSupplier, InsertSpendUpload, InsertSpendEntry as InsertSpendData, InsertDashboardWidget } from "../app/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import XLSX from 'xlsx';

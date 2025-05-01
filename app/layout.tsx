@@ -1,19 +1,37 @@
 import type { Metadata } from "next";
-import { Inter as FontSans } from "next/font/google";
+import { Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
-import { Providers } from "./providers";
 import "./globals.css";
+import { Providers } from "./providers";
 
-const fontSans = FontSans({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
+// Import the Inter font
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "AI Procurement Negotiator",
-  description: "Optimize supplier negotiations with AI-powered tools",
-  authors: [{ name: "Your Company Name" }],
-  keywords: ["procurement", "negotiation", "AI", "suppliers", "contracts"],
+  description: "AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions through intelligent contract management.",
+  keywords: [
+    "procurement",
+    "AI negotiation",
+    "supplier management",
+    "contract management",
+    "spend analysis",
+    "market analysis",
+  ],
+  authors: [
+    {
+      name: "AI Negotiator Team",
+    },
+  ],
+  creator: "AI Negotiator",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "/",
+    title: "AI Procurement Negotiator",
+    description: "AI-powered procurement negotiation platform",
+    siteName: "AI Negotiator",
+  },
 };
 
 export default function RootLayout({
@@ -27,7 +45,7 @@ export default function RootLayout({
       <body
         className={cn(
           "min-h-screen bg-background font-sans antialiased",
-          fontSans.variable
+          inter.variable
         )}
       >
         <Providers>{children}</Providers>
