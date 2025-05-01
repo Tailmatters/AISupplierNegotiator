@@ -1,123 +1,95 @@
+import { NextRequest } from "next/server"
 import { cookies } from "next/headers"
-import { NextRequest, NextResponse } from "next/server"
-import { SignJWT, jwtVerify } from "jose"
-import { db } from "@/lib/db"
-import { users, type User } from "@/schema"
-import { eq } from "drizzle-orm"
+import { jwtVerify, SignJWT } from "jose"
+import { db, getUserByEmail, getUserById } from "@/lib/db"
+import { type User } from "@/schema"
+import { z } from "zod"
 import bcrypt from "bcryptjs"
 
-// Token expiration
-const TOKEN_EXPIRATION = "8h"
+// Constants for JWT configuration
+const JWT_SECRET = process.env.SESSION_SECRET || "fallback_secret_for_development_only"
+const JWT_EXPIRES_IN = "7d"
 
-// Authentication token cookie name
-export const AUTH_COOKIE = "auth_token"
+// Authentication error messages
+export const AUTH_ERRORS = {
+  INVALID_CREDENTIALS: "Invalid email or password",
+  USER_NOT_FOUND: "User not found",
+  UNAUTHORIZED: "Unauthorized access",
+  MISSING_TOKEN: "Authentication token missing",
+  INVALID_TOKEN: "Invalid or expired token",
+}
 
-// Secret key for JWT signing
-const JWT_SECRET = process.env.SESSION_SECRET || "a-very-secret-key-that-should-be-in-env"
+// Login validation schema
+export const loginSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+})
 
-// User payload for JWT
+// JWT payload interface
 export interface JWTPayload {
   id: number
   username: string
   email: string
-  name: string
+  name: string | null
   role: string
 }
 
 /**
- * Generate a hashed password
- * @param password Plain text password
- * @returns Hashed password
+ * Create a JWT token for the authenticated user
+ * @param user User object to encode in the token
+ * @returns JWT token string
  */
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10)
-}
-
-/**
- * Compare plain text password with hashed password
- * @param plainPassword Plain text password
- * @param hashedPassword Hashed password
- * @returns Whether passwords match
- */
-export async function comparePasswords(
-  plainPassword: string,
-  hashedPassword: string
-): Promise<boolean> {
-  return bcrypt.compare(plainPassword, hashedPassword)
-}
-
-/**
- * Create a JWT token for a user
- * @param user User object
- * @returns JWT token
- */
-export async function createToken(user: JWTPayload): Promise<string> {
-  const token = await new SignJWT({
+export async function createToken(user: User): Promise<string> {
+  const payload: JWTPayload = {
     id: user.id,
     username: user.username,
     email: user.email,
     name: user.name,
     role: user.role,
-  })
+  }
+
+  const secretKey = new TextEncoder().encode(JWT_SECRET)
+  
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(TOKEN_EXPIRATION)
-    .sign(new TextEncoder().encode(JWT_SECRET))
-
+    .setExpirationTime(JWT_EXPIRES_IN)
+    .sign(secretKey)
+  
   return token
 }
 
 /**
- * Verify a JWT token
- * @param token JWT token
- * @returns User payload or null if invalid
+ * Verify a JWT token and extract the payload
+ * @param token JWT token string
+ * @returns JWT payload if token is valid
  */
-export async function verifyToken(token: string): Promise<JWTPayload | null> {
+export async function verifyToken(token: string): Promise<JWTPayload> {
   try {
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(JWT_SECRET)
-    )
+    const secretKey = new TextEncoder().encode(JWT_SECRET)
+    const { payload } = await jwtVerify(token, secretKey)
     
     return payload as JWTPayload
   } catch (error) {
-    return null
+    throw new Error(AUTH_ERRORS.INVALID_TOKEN)
   }
 }
 
 /**
- * Get the current user from the JWT token
- * @param req Next.js request object
+ * Get the current user from the request cookies
+ * @param request Next.js request object
  * @returns User object or null if not authenticated
  */
-export async function getCurrentUser(req?: NextRequest): Promise<User | null> {
+export async function getCurrentUser(request: NextRequest): Promise<User | null> {
+  const token = request.cookies.get("token")?.value
+  
+  if (!token) {
+    return null
+  }
+  
   try {
-    // Get token from cookies (server-side)
-    let token: string | undefined
-    
-    if (req) {
-      // For middleware use
-      token = req.cookies.get(AUTH_COOKIE)?.value
-    } else {
-      // For route handlers and server components
-      const cookieStore = cookies()
-      token = cookieStore.get(AUTH_COOKIE)?.value
-    }
-    
-    if (!token) {
-      return null
-    }
-    
     const payload = await verifyToken(token)
-    if (!payload) {
-      return null
-    }
-    
-    // Get user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, payload.id))
+    const user = await getUserById(payload.id)
     
     if (!user) {
       return null
@@ -125,83 +97,79 @@ export async function getCurrentUser(req?: NextRequest): Promise<User | null> {
     
     return user
   } catch (error) {
-    console.error("Error getting current user:", error)
     return null
   }
 }
 
 /**
- * Set an authentication cookie in the response
- * @param token JWT token
- * @param response NextResponse object
+ * Get the current user from the server component context
+ * @returns User object or null if not authenticated
  */
-export function setAuthCookie(token: string, response: NextResponse): void {
-  response.cookies.set({
-    name: AUTH_COOKIE,
-    value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 8, // 8 hours in seconds
-  })
-}
-
-/**
- * Clear the authentication cookie
- * @param response NextResponse object
- */
-export function clearAuthCookie(response: NextResponse): void {
-  response.cookies.set({
-    name: AUTH_COOKIE,
-    value: "",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0, // Expire immediately
-  })
-}
-
-/**
- * Get the JWT token from request cookies
- * @param req NextRequest object
- * @returns JWT token or null if not found
- */
-export function getTokenFromRequest(req: NextRequest): string | null {
-  const token = req.cookies.get(AUTH_COOKIE)?.value
-  return token || null
-}
-
-/**
- * Update a user's password
- * @param userId User ID
- * @param newPassword New password (plain text)
- * @returns Whether password was updated successfully
- */
-export async function updateUserPassword(
-  userId: number,
-  newPassword: string
-): Promise<boolean> {
+export async function getServerUser(): Promise<User | null> {
+  const token = cookies().get("token")?.value
+  
+  if (!token) {
+    return null
+  }
+  
   try {
-    const hashedPassword = await hashPassword(newPassword)
+    const payload = await verifyToken(token)
+    const user = await getUserById(payload.id)
     
-    await db
-      .update(users)
-      .set({ password: hashedPassword, updatedAt: new Date() })
-      .where(eq(users.id, userId))
+    if (!user) {
+      return null
+    }
     
-    return true
+    return user
   } catch (error) {
-    console.error("Error updating user password:", error)
-    return false
+    return null
   }
 }
 
 /**
- * Get user cookie from server component
- * @returns JWT token from cookies
+ * Hash a password using bcrypt
+ * @param password Plain text password
+ * @returns Hashed password
  */
-export async function getUserCookie(): Promise<string | undefined> {
-  return cookies().get(AUTH_COOKIE)?.value
+export async function hashPassword(password: string): Promise<string> {
+  const salt = await bcrypt.genSalt(10)
+  return bcrypt.hash(password, salt)
+}
+
+/**
+ * Compare a plain text password with a hashed password
+ * @param password Plain text password
+ * @param hashedPassword Hashed password
+ * @returns True if passwords match
+ */
+export async function comparePasswords(
+  password: string,
+  hashedPassword: string
+): Promise<boolean> {
+  return bcrypt.compare(password, hashedPassword)
+}
+
+/**
+ * Authenticate a user with email and password
+ * @param email User email
+ * @param password User password
+ * @returns User object if authentication successful
+ */
+export async function authenticateUser(
+  email: string,
+  password: string
+): Promise<User> {
+  const user = await getUserByEmail(email)
+  
+  if (!user) {
+    throw new Error(AUTH_ERRORS.INVALID_CREDENTIALS)
+  }
+  
+  const passwordValid = await comparePasswords(password, user.password)
+  
+  if (!passwordValid) {
+    throw new Error(AUTH_ERRORS.INVALID_CREDENTIALS)
+  }
+  
+  return user
 }

@@ -1,98 +1,79 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { db } from "@/lib/db"
-import { hashPassword, createToken, setAuthCookie } from "@/lib/auth"
-import { users, insertUserSchema, type User } from "@/schema"
-import { eq } from "drizzle-orm"
+import { createUser, getUserByEmail } from "@/lib/db"
+import { hashPassword, createToken } from "@/lib/auth"
+import { insertUserSchema } from "@/schema"
 
-// Validation schema for registration
-const registerSchema = insertUserSchema
-  .extend({
-    confirmPassword: z.string().min(1, "Confirm password is required"),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  })
+// Extended schema for registration with validation
+const registerSchema = insertUserSchema.extend({
+  email: z.string().email("Please enter a valid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(100, "Password is too long"),
+})
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json()
+    // Parse request body
+    const body = await request.json()
     
-    // Validate request
-    const result = registerSchema.safeParse(body)
-    if (!result.success) {
+    // Validate input with zod
+    const validatedData = registerSchema.safeParse(body)
+    
+    if (!validatedData.success) {
       return NextResponse.json(
-        { error: "Invalid request", details: result.error.format() },
+        { error: validatedData.error.errors[0].message },
         { status: 400 }
       )
     }
     
-    const { confirmPassword, ...userData } = result.data
+    const userData = validatedData.data
     
-    // Check if username already exists
-    const existingUsername = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, userData.username))
+    // Check if email is already in use
+    const existingUser = await getUserByEmail(userData.email)
     
-    if (existingUsername.length > 0) {
+    if (existingUser) {
       return NextResponse.json(
-        { error: "Username already exists" },
-        { status: 400 }
+        { error: "Email is already in use" },
+        { status: 409 }
       )
     }
     
-    // Check if email already exists
-    const existingEmail = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, userData.email))
-    
-    if (existingEmail.length > 0) {
-      return NextResponse.json(
-        { error: "Email already exists" },
-        { status: 400 }
-      )
-    }
-    
-    // Hash password
+    // Hash the password
     const hashedPassword = await hashPassword(userData.password)
     
-    // Create user
-    const [newUser] = await db
-      .insert(users)
-      .values({ ...userData, password: hashedPassword })
-      .returning()
-    
-    // Create JWT token
-    const token = await createToken({
-      id: newUser.id,
-      username: newUser.username,
-      email: newUser.email,
-      name: newUser.name,
-      role: newUser.role,
+    // Create new user with hashed password
+    const newUser = await createUser({
+      ...userData,
+      password: hashedPassword,
     })
     
-    // Create response
-    const response = NextResponse.json({
-      user: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-        name: newUser.name,
-        role: newUser.role,
-      },
-    })
+    // Generate JWT token
+    const token = await createToken(newUser)
     
-    // Set auth cookie
-    setAuthCookie(token, response)
+    // Return user data without password
+    const { password: _, ...userWithoutPassword } = newUser
+    
+    // Set cookie with the JWT token
+    const response = NextResponse.json(userWithoutPassword, { status: 201 })
+    
+    response.cookies.set({
+      name: "token",
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    })
     
     return response
-  } catch (error) {
+  } catch (error: any) {
     console.error("Registration error:", error)
+    
     return NextResponse.json(
-      { error: "An error occurred during registration" },
+      { error: "Failed to create user: " + error.message },
       { status: 500 }
     )
   }

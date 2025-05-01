@@ -1,88 +1,60 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { compare } from "bcryptjs"
-import { db } from "@/lib/db"
-import { createToken, setAuthCookie } from "@/lib/auth"
-import { users, type User } from "@/schema"
-import { eq } from "drizzle-orm"
+import bcrypt from "bcryptjs"
+import { getUserByEmail } from "@/lib/db"
+import { AUTH_ERRORS, authenticateUser, createToken } from "@/lib/auth"
+import { loginSchema } from "@/schema"
 
-// Validation schema for login request
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
-})
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json()
+    // Parse and validate request body
+    const body = await request.json()
     
-    // Validate request
-    const result = loginSchema.safeParse(body)
-    if (!result.success) {
+    // Validate input with zod
+    const validatedData = loginSchema.safeParse(body)
+    
+    if (!validatedData.success) {
       return NextResponse.json(
-        { error: "Invalid request", details: result.error.format() },
+        { error: validatedData.error.errors[0].message },
         { status: 400 }
       )
     }
     
-    const { username, password } = result.data
+    const { email, password } = validatedData.data
     
-    // Find user by username
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username))
-    
-    if (!user) {
+    try {
+      // Authenticate user
+      const user = await authenticateUser(email, password)
+      
+      // Generate JWT token
+      const token = await createToken(user)
+      
+      // Create response with user data (excluding password)
+      const { password: _, ...userWithoutPassword } = user
+      
+      // Set cookie with the JWT token
+      const response = NextResponse.json(userWithoutPassword)
+      
+      response.cookies.set({
+        name: "token",
+        value: token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+      })
+      
+      return response
+    } catch (error: any) {
       return NextResponse.json(
-        { error: "Invalid username or password" },
+        { error: error.message || AUTH_ERRORS.INVALID_CREDENTIALS },
         { status: 401 }
       )
     }
-    
-    // Verify password
-    const isPasswordValid = await compare(password, user.password)
-    if (!isPasswordValid) {
-      return NextResponse.json(
-        { error: "Invalid username or password" },
-        { status: 401 }
-      )
-    }
-    
-    // Update last login time
-    await db
-      .update(users)
-      .set({ lastLogin: new Date() })
-      .where(eq(users.id, user.id))
-    
-    // Create JWT token
-    const token = await createToken({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    })
-    
-    // Create response
-    const response = NextResponse.json({
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
-    })
-    
-    // Set auth cookie
-    setAuthCookie(token, response)
-    
-    return response
-  } catch (error) {
-    console.error("Login error:", error)
+  } catch (error: any) {
     return NextResponse.json(
-      { error: "An error occurred during login" },
+      { error: "Server error: " + error.message },
       { status: 500 }
     )
   }
