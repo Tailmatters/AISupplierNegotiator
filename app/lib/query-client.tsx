@@ -1,148 +1,133 @@
 "use client";
 
-import React, { useState } from "react";
-import { QueryClient, QueryClientProvider, QueryKey } from "@tanstack/react-query";
-// Uncomment if you need dev tools
-// import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import React from "react";
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryFunction,
+} from "@tanstack/react-query";
 
-interface ApiRequestInit extends RequestInit {
-  parseJson?: boolean;
+/**
+ * Creates a query client with default options
+ */
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000, // 1 minute
+        refetchOnWindowFocus: false,
+      },
+    },
+  });
 }
 
-type ApiRequestError = Error & {
-  status?: number;
-  headers?: Headers;
-};
+// Create a query client instance
+export const queryClient = createQueryClient();
 
+/**
+ * Query Provider component that wraps the application
+ */
+export function QueryProvider({ children }: { children: React.ReactNode }) {
+  const [client] = React.useState(() => createQueryClient());
+
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/**
+ * Options for API requests
+ */
+interface ApiRequestOptions {
+  headers?: Record<string, string>;
+  body?: any;
+}
+
+/**
+ * Makes an API request to the backend with proper error handling
+ * @param method HTTP method
+ * @param url API endpoint URL
+ * @param data Request body data (for POST, PUT, PATCH)
+ * @param options Additional request options
+ * @returns Response object
+ * @throws Error with message from the API or generic error message
+ */
 export async function apiRequest(
-  method: string,
+  method: Method,
   url: string,
-  body?: any,
-  options: ApiRequestInit = {}
-) {
-  const { parseJson = true, ...init } = options;
-  const headers = init.headers || {};
-
-  const req: RequestInit = {
-    method,
-    ...init,
-    headers: {
-      ...("Content-Type" in headers
-        ? {}
-        : {
-            "Content-Type": "application/json",
-          }),
-      ...headers,
-    },
+  data?: any,
+  options: ApiRequestOptions = {}
+): Promise<Response> {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
   };
 
-  if (body !== undefined) {
-    req.body = typeof body === "string" ? body : JSON.stringify(body);
-  }
+  const config: RequestInit = {
+    method,
+    headers,
+    credentials: "include", // Include cookies for authentication
+    body: data ? JSON.stringify(data) : undefined,
+  };
 
-  const response = await fetch(url, req);
+  const response = await fetch(url, config);
 
   if (!response.ok) {
-    const error: ApiRequestError = new Error(
-      `API request failed with status ${response.status}`
-    );
-    error.status = response.status;
-    error.headers = response.headers;
-
+    // Try to get error message from response body
     try {
       const errorData = await response.json();
-      Object.assign(error, { data: errorData });
-
-      error.message =
-        errorData.message ||
-        errorData.error ||
-        `API request failed with status ${response.status}`;
+      throw new Error(
+        errorData.error || errorData.message || "Request failed"
+      );
     } catch (e) {
-      // If response is not JSON, just use the status text
-      error.message = response.statusText;
+      // If we can't parse the response, use status text
+      if (e instanceof Error && e.message !== "Request failed") {
+        throw e;
+      }
+      throw new Error(
+        response.statusText || `Request failed with status ${response.status}`
+      );
     }
-
-    throw error;
   }
 
-  // Return the response directly if parseJson is false
-  if (!parseJson) {
-    return response;
-  }
-
-  // For 204 No Content, don't try to parse JSON
-  if (response.status === 204) {
-    return {};
-  }
-
-  try {
-    return await response.json();
-  } catch (error) {
-    if (response.headers.get("Content-Length") === "0") {
-      return {};
-    }
-    throw error;
-  }
+  return response;
 }
 
-export const defaultQueryFn = async ({ queryKey }: { queryKey: string[] }): Promise<any> => {
-  const [url, params] = queryKey;
-  
-  let fullUrl = url;
-  if (params) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params as Record<string, string>).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        searchParams.append(key, value);
-      }
-    });
-    
-    const queryString = searchParams.toString();
-    if (queryString) {
-      fullUrl += `?${queryString}`;
-    }
-  }
+/**
+ * Options for the query function generator
+ */
+interface QueryFnOptions {
+  on401?: "throw" | "returnNull";
+}
 
-  try {
-    const data = await apiRequest("GET", fullUrl);
-    return data;
-  } catch (error) {
-    throw error;
-  }
-};
+/**
+ * Creates a query function for TanStack React Query that handles API requests
+ * @param options Options for handling specific cases (e.g., 401 errors)
+ * @returns A query function for react-query
+ */
+export function getQueryFn(options: QueryFnOptions = {}): QueryFunction {
+  const { on401 = "throw" } = options;
 
-export function getQueryFn({ on401 = "throw" }: { on401?: "throw" | "returnNull" } = {}) {
-  return async ({ queryKey }: { queryKey: string[] }): Promise<any> => {
+  return async ({ queryKey }: { queryKey: string[] }) => {
+    const url = queryKey[0];
+
     try {
-      return await defaultQueryFn({ queryKey });
-    } catch (error: any) {
-      if (error.status === 401 && on401 === "returnNull") {
+      const response = await apiRequest("GET", url);
+      
+      if (response.status === 204) {
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("401") &&
+        on401 === "returnNull"
+      ) {
         return null;
       }
       throw error;
     }
   };
-}
-
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      refetchOnWindowFocus: false,
-      retry: 1,
-      queryFn: defaultQueryFn,
-    },
-  },
-});
-
-export function QueryProvider({ children }: { children: React.ReactNode }) {
-  const [client] = useState(() => queryClient);
-
-  return (
-    <QueryClientProvider client={client}>
-      {children}
-      {/* Uncomment if you need dev tools */}
-      {/* <ReactQueryDevtools initialIsOpen={false} /> */}
-    </QueryClientProvider>
-  );
 }
