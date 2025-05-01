@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getServerUser } from "@/lib/auth"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const user = await getServerUser()
     
@@ -17,10 +17,10 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(userWithoutPassword, { status: 200 })
   } catch (error) {
-    console.error("Get user error:", error)
+    console.error("Error getting user:", error)
     
     return NextResponse.json(
-      { error: "Failed to get user" },
+      { error: "Failed to get user data" },
       { status: 500 }
     )
   }
