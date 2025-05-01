@@ -1,63 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { getAuthUser } from '@/lib/auth'
 
-// Define paths that require authentication
-const PROTECTED_PATHS = [
+// Routes that require authentication
+const protectedRoutes = [
   '/dashboard',
-  '/negotiations',
   '/suppliers',
+  '/negotiations',
   '/contracts',
   '/spend-analysis',
+  '/market-analysis',
   '/settings',
+  '/account',
 ]
 
-// Define paths that are only accessible to unauthenticated users
-const UNAUTHENTICATED_ONLY_PATHS = [
+// Routes that shouldn't be accessible when authenticated
+const publicOnlyRoutes = [
   '/auth',
 ]
 
 export async function middleware(request: NextRequest) {
-  // Get the path from request
   const path = request.nextUrl.pathname
   
-  // Get the auth token from cookies
-  const token = request.cookies.get('auth-token')?.value
+  // Check if the user is authenticated
+  const user = await getAuthUser(request)
+  const isAuthenticated = !!user
   
-  // Check if the path is protected
-  const isProtectedPath = PROTECTED_PATHS.some(protectedPath => 
-    path === protectedPath || path.startsWith(`${protectedPath}/`)
-  )
-  
-  // Check if the path is for unauthenticated users only
-  const isUnauthenticatedOnlyPath = UNAUTHENTICATED_ONLY_PATHS.some(unauthPath => 
-    path === unauthPath || path.startsWith(`${unauthPath}/`)
-  )
-  
-  // Verify the token if it exists
-  let isAuthenticated = false
-  if (token) {
-    const payload = await verifyToken(token)
-    isAuthenticated = !!payload?.id
+  // If user is accessing a protected route and is not logged in, redirect to login
+  if (protectedRoutes.some(route => path.startsWith(route)) && !isAuthenticated) {
+    const redirectUrl = new URL('/auth', request.url)
+    redirectUrl.searchParams.set('callbackUrl', path)
+    return NextResponse.redirect(redirectUrl)
   }
   
-  // Redirect authenticated users away from unauthenticated-only paths
-  if (isUnauthenticatedOnlyPath && isAuthenticated) {
+  // If user is accessing a public-only route and is logged in, redirect to dashboard
+  if (publicOnlyRoutes.some(route => path === route) && isAuthenticated) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
   
-  // Redirect unauthenticated users away from protected paths
-  if (isProtectedPath && !isAuthenticated) {
-    return NextResponse.redirect(new URL('/auth', request.url))
-  }
-  
-  // Continue with the request for all other cases
+  // Allow the request to continue
   return NextResponse.next()
 }
 
-// Configure the middleware to run on specific paths
+// Define which paths the middleware should be invoked on
+// Matching both protected and public routes
 export const config = {
   matcher: [
-    // Match all paths except static files and API routes
-    '/((?!_next/static|_next/image|api|favicon.ico).*)',
+    /*
+     * Match all request paths except:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (robots.txt, sitemap.xml, etc.)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|sitemap.xml|robots.txt).*)',
   ],
 }

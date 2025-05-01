@@ -1,28 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 
-import { db, withErrorHandling } from '@/lib/db'
-import { hashPassword, setAuthCookie, signToken } from '@/lib/auth'
-import { insertUserSchema, users } from '@/schema'
-
-// Registration request schema with additional validation
-const registerSchema = insertUserSchema.extend({
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .max(100, 'Password is too long'),
-})
+import { db } from '@/lib/db'
+import { hashPassword, createToken, setAuthCookie } from '@/lib/auth'
+import { users, insertUserSchema } from '@/schema'
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse and validate request body
+    // Parse request body
     const body = await request.json()
-    const result = registerSchema.safeParse(body)
     
+    // Validate request body
+    const result = insertUserSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { error: 'Invalid request', details: result.error.format() },
+        { error: 'Invalid request', issues: result.error.issues },
         { status: 400 }
       )
     }
@@ -30,17 +22,10 @@ export async function POST(request: NextRequest) {
     const userData = result.data
     
     // Check if username already exists
-    const existingUser = await withErrorHandling(
-      async () => {
-        const [user] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.username, userData.username))
-        
-        return user
-      },
-      'Failed to check for existing user'
-    )
+    const [existingUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, userData.username))
     
     if (existingUser) {
       return NextResponse.json(
@@ -49,46 +34,53 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Hash the password
+    // Check if email already exists
+    if (userData.email) {
+      const [existingEmail] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, userData.email))
+      
+      if (existingEmail) {
+        return NextResponse.json(
+          { error: 'Email already exists' },
+          { status: 409 }
+        )
+      }
+    }
+    
+    // Hash password
     const hashedPassword = await hashPassword(userData.password)
     
-    // Create the user
-    const newUser = await withErrorHandling(
-      async () => {
-        const [user] = await db
-          .insert(users)
-          .values({
-            ...userData,
-            password: hashedPassword,
-          })
-          .returning({
-            id: users.id,
-            username: users.username,
-            name: users.name,
-            email: users.email,
-            role: users.role,
-            company: users.company,
-            title: users.title,
-            profileImage: users.profileImage,
-            createdAt: users.createdAt,
-          })
-        
-        return user
-      },
-      'Failed to create user'
-    )
+    // Insert user into database
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        ...userData,
+        password: hashedPassword,
+        role: userData.role || 'buyer',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning()
     
-    // Generate JWT token
-    const token = await signToken({
+    // Create JWT token
+    const token = await createToken({
       id: newUser.id,
       username: newUser.username,
+      email: newUser.email,
+      name: newUser.name,
+      role: newUser.role,
     })
     
-    // Create response with user data
-    const response = NextResponse.json(newUser, { status: 201 })
+    // Prepare user data (exclude password)
+    const { password: _, ...safeUserData } = newUser
     
-    // Set auth cookie with token
-    await setAuthCookie(response, token)
+    // Create response
+    const response = NextResponse.json(safeUserData, { status: 201 })
+    
+    // Set auth cookie
+    setAuthCookie(response, token)
     
     return response
   } catch (error) {

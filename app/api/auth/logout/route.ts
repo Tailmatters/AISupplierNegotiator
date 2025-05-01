@@ -3,13 +3,13 @@ import { clearAuthCookie } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    // Create a response
+    // Create response
     const response = NextResponse.json(
       { success: true, message: 'Logged out successfully' },
       { status: 200 }
     )
     
-    // Clear the auth cookie
+    // Clear auth cookie
     clearAuthCookie(response)
     
     return response

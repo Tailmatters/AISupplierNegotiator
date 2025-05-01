@@ -1,45 +1,69 @@
 import { Pool, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-serverless'
-import ws from 'ws'
+import { WebSocket } from 'ws'
 import * as schema from '@/schema'
 
-// This is needed for Neon serverless driver
-neonConfig.webSocketConstructor = ws
+// Configure neon for Vercel environment
+neonConfig.webSocketConstructor = WebSocket
 
-// Ensure database URL is available
+// Environment validation
 if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is not set. Database connections will fail.')
+  throw new Error(
+    'DATABASE_URL must be set. Did you forget to provision a database?'
+  )
 }
 
-// Create a connection pool
+// Database connection pool
 export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
-  // Configure connection pool for serverless environment
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  // Default connection pool configuration
+  max: 10, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
+  connectionTimeoutMillis: 5000, // How long to wait for a connection to become available
+  allowExitOnIdle: false, // Allow the pool to exit if all clients disconnect
 })
 
-// Initialize Drizzle ORM with our schema
+// Drizzle ORM instance
 export const db = drizzle(pool, { schema })
 
-// Helper function to handle database errors with proper logging
-export async function withErrorHandling<T>(
-  operation: () => Promise<T>,
-  errorMessage = 'Database operation failed'
+/**
+ * Execute a transaction within a single client from the pool
+ * @param callback - Transaction callback with the Drizzle instance
+ * @returns Result of the transaction callback
+ */
+export async function transaction<T>(
+  callback: (tx: typeof db) => Promise<T>
 ): Promise<T> {
+  const client = await pool.connect()
   try {
-    return await operation()
-  } catch (error) {
-    console.error(`${errorMessage}:`, error)
-    throw new Error(`${errorMessage}: ${error.message || 'Unknown error'}`)
+    await client.query('BEGIN')
+    const tx = drizzle(client, { schema })
+    const result = await callback(tx)
+    await client.query('COMMIT')
+    return result
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
   }
 }
 
-// Generic query function with error handling
-export async function query<T>(
-  queryFn: () => Promise<T>,
-  errorMessage?: string
-): Promise<T> {
-  return withErrorHandling(queryFn, errorMessage)
+/**
+ * Health check function for the database connection
+ * @returns True if the database is connected, false otherwise
+ */
+export async function healthCheck(): Promise<boolean> {
+  try {
+    const client = await pool.connect()
+    try {
+      await client.query('SELECT 1')
+      return true
+    } finally {
+      client.release()
+    }
+  } catch (error) {
+    console.error('Database health check failed:', error)
+    return false
+  }
 }

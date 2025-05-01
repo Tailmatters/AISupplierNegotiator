@@ -3,24 +3,24 @@ import { getAuthUser } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the authenticated user
+    // Get authenticated user
     const user = await getAuthUser(request)
     
     if (!user) {
       return NextResponse.json(
-        { error: 'Authentication required' },
+        { error: 'Not authenticated' },
         { status: 401 }
       )
     }
     
-    // Remove password from user data
-    const { password, ...userData } = user
+    // Return user data without password
+    const { password: _, ...userData } = user
     
     return NextResponse.json(userData, { status: 200 })
   } catch (error) {
-    console.error('User fetch error:', error)
+    console.error('User retrieval error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch user', message: error.message },
+      { error: 'Failed to get user data', message: error.message },
       { status: 500 }
     )
   }
