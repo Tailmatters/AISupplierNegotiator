@@ -1,14 +1,12 @@
-'use client'
+"use client"
 
-import * as React from 'react'
-import { ThemeProvider as NextThemesProvider } from 'next-themes'
-import { type ThemeProviderProps } from 'next-themes/dist/types'
+import * as React from "react"
+import { ThemeProvider as NextThemesProvider } from "next-themes"
+import { type ThemeProviderProps } from "next-themes/dist/types"
 
 /**
- * Theme provider component that wraps next-themes
- * This allows for toggling between light, dark, and system themes
- * @param props Theme provider props including attribute, defaultTheme, enableSystem
- * @returns Theme provider component
+ * Theme provider component for managing light/dark mode
+ * Uses next-themes under the hood
  */
 export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   return <NextThemesProvider {...props}>{children}</NextThemesProvider>

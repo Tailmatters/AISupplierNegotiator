@@ -1,26 +1,29 @@
-import { type ClassValue, clsx } from 'clsx'
+import { ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { type ZodIssue } from 'zod'
 
 /**
- * Combines class names with Tailwind's merge function
- * This allows for conditional class application while maintaining Tailwind's specificity
+ * Combines multiple class names into a single string using clsx and tailwind-merge
+ * to properly handle Tailwind CSS classes
+ * @param inputs Multiple class name inputs to combine
+ * @returns A single string of combined class names
  */
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format a date in a user-friendly format
- * @param date - Date to format
- * @param options - Intl.DateTimeFormatOptions
+ * Format a date into a localized string
+ * @param date Date to format
+ * @param options Intl.DateTimeFormatOptions for formatting
  * @returns Formatted date string
  */
 export function formatDate(
   date: Date | string | number,
   options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
     month: 'long',
     day: 'numeric',
-    year: 'numeric',
   }
 ): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -30,27 +33,40 @@ export function formatDate(
 
 /**
  * Format a currency value
- * @param value - Number to format
- * @param currency - Currency code
+ * @param amount Amount to format
+ * @param currency Currency code (default: USD)
  * @returns Formatted currency string
  */
 export function formatCurrency(
-  value: number,
+  amount: number,
   currency: string = 'USD'
 ): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-  }).format(value)
+  }).format(amount)
+}
+
+/**
+ * Format a number with specified options
+ * @param value Number to format
+ * @param options Intl.NumberFormatOptions for formatting
+ * @returns Formatted number string
+ */
+export function formatNumber(
+  value: number,
+  options: Intl.NumberFormatOptions = {}
+): string {
+  return new Intl.NumberFormat('en-US', options).format(value)
 }
 
 /**
  * Format a percentage value
- * @param value - Number to format as percentage (0-1)
- * @param decimal - Number of decimal places
+ * @param value Decimal value to format as percentage (e.g., 0.1 for 10%)
+ * @param decimals Number of decimal places
  * @returns Formatted percentage string
  */
-export function formatPercent(value: number, decimals: number = 1): string {
+export function formatPercentage(value: number, decimals: number = 2): string {
   return new Intl.NumberFormat('en-US', {
     style: 'percent',
     minimumFractionDigits: decimals,
@@ -59,65 +75,59 @@ export function formatPercent(value: number, decimals: number = 1): string {
 }
 
 /**
- * Truncate a string to a specified length with ellipsis
- * @param str - String to truncate
- * @param length - Maximum length
- * @returns Truncated string with ellipsis if needed
- */
-export function truncate(str: string, length: number = 100): string {
-  if (!str || str.length <= length) return str
-  return `${str.slice(0, length)}...`
-}
-
-/**
- * Calculate the difference between two dates in days
- * @param startDate - Start date
- * @param endDate - End date (defaults to now)
- * @returns Number of days difference
- */
-export function daysBetween(
-  startDate: Date | string,
-  endDate: Date | string = new Date()
-): number {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const diff = Math.abs(end.getTime() - start.getTime())
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
-}
-
-/**
- * Safely parse JSON with error handling
- * @param json - JSON string to parse
- * @param fallback - Fallback value if parsing fails
- * @returns Parsed object or fallback
- */
-export function safeJsonParse<T>(json: string, fallback: T): T {
-  try {
-    return JSON.parse(json) as T
-  } catch (error) {
-    return fallback
-  }
-}
-
-/**
- * Delay execution for a specified time
- * @param ms - Milliseconds to delay
+ * Create a delay using a promise
+ * @param ms Milliseconds to delay
  * @returns Promise that resolves after the delay
  */
 export function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
- * Generate a random string of specified length
- * @param length - Length of the random string
- * @returns Random string
+ * Truncate a string to a maximum length with ellipsis
+ * @param text Text to truncate
+ * @param maxLength Maximum length before truncation
+ * @returns Truncated text with ellipsis if needed
  */
-export function generateRandomString(length: number = 8): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
+}
+
+/**
+ * Get form errors from Zod validation issues
+ * @param issues Zod validation issues
+ * @returns Object mapping field paths to error messages
+ */
+export function getFormErrors(issues: ZodIssue[]): Record<string, string> {
+  const errors: Record<string, string> = {}
+  
+  for (const issue of issues) {
+    const path = issue.path.join('.')
+    if (!errors[path]) {
+      errors[path] = issue.message
+    }
   }
-  return result
+  
+  return errors
+}
+
+/**
+ * Check if an object is empty
+ * @param obj Object to check
+ * @returns True if object has no own properties
+ */
+export function isEmptyObject(obj: Record<string, unknown>): boolean {
+  return Object.keys(obj).length === 0
+}
+
+/**
+ * Generate a random string ID
+ * @param length Length of the ID
+ * @returns Random string ID
+ */
+export function generateId(length: number = 12): string {
+  return Math.random()
+    .toString(36)
+    .substring(2, 2 + length)
 }
