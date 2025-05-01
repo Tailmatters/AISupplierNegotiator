@@ -10,7 +10,7 @@ import {
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";
-import { db } from "./db";
+import { db, executeQuery } from "./db";
 import { eq, and, desc, not, sql } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import pkg from "pg";
