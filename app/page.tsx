@@ -1,143 +1,225 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  BarChart,
+  Activity,
+  FileText,
+  Users,
+  PieChart,
+  ShoppingCart,
+  MessageSquare,
+  Settings,
+  LogOut,
+} from "lucide-react";
 
 /**
  * Dashboard page / Home page for the procurement platform
  */
 export default function HomePage() {
-  const { user, isLoading } = useAuth();
-  const router = useRouter();
+  const { user, logoutMutation } = useAuth();
 
-  // Redirect to auth page if not logged in
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/auth");
-    }
-  }, [isLoading, user, router]);
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
 
-  // Show loading spinner while checking authentication
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // If not logged in, show nothing (redirecting)
-  if (!user) {
-    return null;
-  }
-
-  // Show dashboard for authenticated user
   return (
-    <div className="container mx-auto px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold gradient-heading">AI Procurement Negotiator</h1>
-        <p className="text-muted-foreground">Your intelligent procurement assistant</p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Quick actions card */}
-        <div className="col-span-1 row-span-1 bg-card rounded-lg shadow p-6 hover-card">
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <ul className="space-y-2">
-            <li className="p-2 hover:bg-muted rounded-md transition-colors">
-              <a href="/negotiations/new" className="flex items-center gap-2">
-                <span className="bg-primary/10 p-2 rounded-full text-primary">+</span>
-                <span>Start New Negotiation</span>
-              </a>
-            </li>
-            <li className="p-2 hover:bg-muted rounded-md transition-colors">
-              <a href="/suppliers" className="flex items-center gap-2">
-                <span className="bg-primary/10 p-2 rounded-full text-primary">👥</span>
-                <span>Manage Suppliers</span>
-              </a>
-            </li>
-            <li className="p-2 hover:bg-muted rounded-md transition-colors">
-              <a href="/spend-analysis" className="flex items-center gap-2">
-                <span className="bg-primary/10 p-2 rounded-full text-primary">📊</span>
-                <span>Upload Spend Data</span>
-              </a>
-            </li>
-            <li className="p-2 hover:bg-muted rounded-md transition-colors">
-              <a href="/contracts" className="flex items-center gap-2">
-                <span className="bg-primary/10 p-2 rounded-full text-primary">📄</span>
-                <span>View Contracts</span>
-              </a>
-            </li>
-          </ul>
+    <div className="flex min-h-screen">
+      {/* Sidebar */}
+      <aside className="hidden md:flex w-64 flex-col bg-card border-r shadow-sm">
+        <div className="p-6 border-b">
+          <h1 className="text-2xl font-bold gradient-heading">AI Negotiator</h1>
         </div>
-
-        {/* Active negotiations card */}
-        <div className="col-span-2 row-span-1 bg-card rounded-lg shadow p-6 hover-card">
-          <h2 className="text-xl font-semibold mb-4">Active Negotiations</h2>
-          <div className="space-y-4">
-            <div className="p-4 border rounded-md">
-              <div className="flex justify-between">
-                <h3 className="font-medium">Office Supplies Contract</h3>
-                <span className="badge badge-primary">In Progress</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Negotiating with OfficeMax for Q2 office supplies
-              </p>
-              <div className="flex justify-between mt-2">
-                <span className="text-sm">Started 3 days ago</span>
-                <a href="/negotiations/1" className="text-sm text-primary hover:underline">
-                  View Details
-                </a>
-              </div>
+        <nav className="flex-1 p-4 space-y-1">
+          <Link href="/" className="flex items-center px-4 py-3 text-primary font-medium bg-primary/5 rounded-md">
+            <Activity className="mr-3 h-5 w-5" />
+            Dashboard
+          </Link>
+          <Link href="/negotiations" className="flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+            <MessageSquare className="mr-3 h-5 w-5" />
+            Negotiations
+          </Link>
+          <Link href="/suppliers" className="flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+            <Users className="mr-3 h-5 w-5" />
+            Suppliers
+          </Link>
+          <Link href="/contracts" className="flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+            <FileText className="mr-3 h-5 w-5" />
+            Contracts
+          </Link>
+          <Link href="/spend-analysis" className="flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+            <BarChart className="mr-3 h-5 w-5" />
+            Spend Analysis
+          </Link>
+          <Link href="/market-analysis" className="flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+            <PieChart className="mr-3 h-5 w-5" />
+            Market Analysis
+          </Link>
+          <div className="pt-4 mt-4 border-t">
+            <Link href="/settings" className="flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md">
+              <Settings className="mr-3 h-5 w-5" />
+              Settings
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center px-4 py-3 text-muted-foreground hover:text-destructive hover:bg-destructive/5 rounded-md"
+            >
+              <LogOut className="mr-3 h-5 w-5" />
+              Log Out
+            </button>
+          </div>
+        </nav>
+        <div className="p-4 border-t">
+          <div className="flex items-center">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+              {user?.name ? user.name.substring(0, 2).toUpperCase() : "UN"}
             </div>
-            <div className="p-4 border rounded-md">
-              <div className="flex justify-between">
-                <h3 className="font-medium">IT Hardware Renewal</h3>
-                <span className="badge badge-warning">Pending Response</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Waiting for TechSupplies Inc. to respond to latest proposal
-              </p>
-              <div className="flex justify-between mt-2">
-                <span className="text-sm">Started 1 week ago</span>
-                <a href="/negotiations/2" className="text-sm text-primary hover:underline">
-                  View Details
-                </a>
-              </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium">{user?.name || "User"}</p>
+              <p className="text-xs text-muted-foreground">{user?.company || ""}</p>
             </div>
           </div>
         </div>
+      </aside>
 
-        {/* Spend analysis summary */}
-        <div className="col-span-1 md:col-span-3 bg-card rounded-lg shadow p-6 hover-card">
-          <h2 className="text-xl font-semibold mb-4">Spend Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-muted/40 p-4 rounded-md text-center">
-              <div className="text-2xl font-bold text-primary">$1.2M</div>
-              <div className="text-sm text-muted-foreground">Total Annual Spend</div>
-            </div>
-            <div className="bg-muted/40 p-4 rounded-md text-center">
-              <div className="text-2xl font-bold text-primary">42</div>
-              <div className="text-sm text-muted-foreground">Active Suppliers</div>
-            </div>
-            <div className="bg-muted/40 p-4 rounded-md text-center">
-              <div className="text-2xl font-bold text-primary">12%</div>
-              <div className="text-sm text-muted-foreground">Savings Opportunity</div>
-            </div>
-            <div className="bg-muted/40 p-4 rounded-md text-center">
-              <div className="text-2xl font-bold text-primary">8</div>
-              <div className="text-sm text-muted-foreground">Categories</div>
-            </div>
-          </div>
-          <div className="mt-4 text-right">
-            <a href="/spend-analysis" className="text-sm text-primary hover:underline">
-              View Detailed Analysis
-            </a>
-          </div>
-        </div>
+      {/* Mobile header */}
+      <div className="md:hidden w-full bg-background border-b p-4 flex items-center justify-between">
+        <h1 className="text-xl font-bold gradient-heading">AI Negotiator</h1>
+        <Button variant="outline" size="icon">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </Button>
       </div>
+
+      {/* Main content */}
+      <main className="flex-1 p-6 md:p-8 overflow-auto">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome back, {user?.name || "User"}! Here's an overview of your procurement activities.
+            </p>
+          </div>
+          <div className="action-buttons">
+            <Button>
+              <ShoppingCart className="mr-2 h-4 w-4" />
+              New Negotiation
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats overview */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-6">
+          <Card className="p-6 hover-card">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Active Negotiations</h3>
+              <MessageSquare className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex items-baseline space-x-2">
+              <p className="text-3xl font-bold">4</p>
+              <span className="badge badge-success">+2 new</span>
+            </div>
+          </Card>
+          
+          <Card className="p-6 hover-card">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Suppliers</h3>
+              <Users className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex items-baseline space-x-2">
+              <p className="text-3xl font-bold">26</p>
+              <span className="badge badge-primary">+3 this month</span>
+            </div>
+          </Card>
+          
+          <Card className="p-6 hover-card">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Contracts</h3>
+              <FileText className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex items-baseline space-x-2">
+              <p className="text-3xl font-bold">15</p>
+              <span className="badge badge-warning">2 expiring</span>
+            </div>
+          </Card>
+          
+          <Card className="p-6 hover-card">
+            <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <h3 className="tracking-tight text-sm font-medium">Savings</h3>
+              <BarChart className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex items-baseline space-x-2">
+              <p className="text-3xl font-bold">$42.5k</p>
+              <span className="badge badge-success">+12% YoY</span>
+            </div>
+          </Card>
+        </div>
+
+        {/* Recent negotiations */}
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold mb-4">Recent Negotiations</h2>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Supplier</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Last Update</th>
+                  <th>Savings</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="font-medium">Supplier A Inc.</td>
+                  <td>Office Supplies</td>
+                  <td><span className="badge badge-primary">Active</span></td>
+                  <td>Today</td>
+                  <td className="text-green-500">+8.5%</td>
+                </tr>
+                <tr>
+                  <td className="font-medium">Tech Hardware Ltd</td>
+                  <td>IT Equipment</td>
+                  <td><span className="badge badge-success">Completed</span></td>
+                  <td>Yesterday</td>
+                  <td className="text-green-500">+12.3%</td>
+                </tr>
+                <tr>
+                  <td className="font-medium">Logistics Partners</td>
+                  <td>Shipping</td>
+                  <td><span className="badge badge-warning">Waiting</span></td>
+                  <td>3 days ago</td>
+                  <td className="text-gray-500">Pending</td>
+                </tr>
+                <tr>
+                  <td className="font-medium">Global Manufacturing</td>
+                  <td>Raw Materials</td>
+                  <td><span className="badge badge-success">Completed</span></td>
+                  <td>1 week ago</td>
+                  <td className="text-green-500">+15.7%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

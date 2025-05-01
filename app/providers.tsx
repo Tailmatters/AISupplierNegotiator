@@ -2,7 +2,7 @@
 
 import React, { ReactNode } from "react";
 import { ThemeProvider } from "next-themes";
-import { QueryProvider } from "@/lib/query-client";
+import { QueryClientProvider } from "@/lib/query-client";
 import { AuthProvider } from "@/hooks/use-auth";
 
 interface ProvidersProps {
@@ -15,15 +15,10 @@ interface ProvidersProps {
  */
 export function Providers({ children }: ProvidersProps) {
   return (
-    <QueryProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
+    <QueryClientProvider>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         <AuthProvider>{children}</AuthProvider>
       </ThemeProvider>
-    </QueryProvider>
+    </QueryClientProvider>
   );
 }

@@ -9,70 +9,41 @@ import { verifyToken } from "@/lib/auth";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Allow public routes
+  // Skip middleware for auth page
+  if (pathname.startsWith("/auth")) {
+    return NextResponse.next();
+  }
+  
+  // Skip middleware for API routes that handle their own auth
+  if (pathname.startsWith("/api/auth")) {
+    return NextResponse.next();
+  }
+  
+  // Skip middleware for static files
   if (
-    pathname === "/auth" ||
-    pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/assets/") ||
-    pathname.startsWith("/images/") ||
-    pathname.endsWith(".ico") ||
-    pathname.endsWith(".svg") ||
-    pathname.endsWith(".png")
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.includes(".")
   ) {
     return NextResponse.next();
   }
-
-  // For API routes, return 401 error
-  if (pathname.startsWith("/api/")) {
-    try {
-      const isValid = await verifyToken(request);
-      
-      if (!isValid) {
-        return NextResponse.json(
-          { error: "Unauthorized" },
-          { status: 401 }
-        );
-      }
-      
-      return NextResponse.next();
-    } catch (error) {
-      console.error("Authentication error in middleware:", error);
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-  }
-
-  // For web pages, redirect to auth page
-  try {
-    const isValid = await verifyToken(request);
-    
-    if (isValid) {
-      return NextResponse.next();
-    }
-    
+  
+  // Check if user is authenticated
+  const isAuthenticated = await verifyToken(request);
+  
+  // If not authenticated and trying to access a protected route, redirect to auth page
+  if (!isAuthenticated) {
     const url = new URL("/auth", request.url);
-    return NextResponse.redirect(url);
-  } catch (error) {
-    console.error("Authentication error in middleware:", error);
-    const url = new URL("/auth", request.url);
+    url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
   }
+  
+  return NextResponse.next();
 }
 
 /**
  * Configure which paths should trigger this middleware
  */
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico, sitemap.xml (common files)
-     */
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml).*)",
-  ],
+  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|.well-known).*)"],
 };
