@@ -5,97 +5,141 @@ import {
   ReactNode,
   useContext,
   useEffect,
-  useMemo,
   useState,
 } from "react"
 import {
   useQuery,
   useMutation,
-  UseQueryResult,
   UseMutationResult,
 } from "@tanstack/react-query"
-import { User, loginSchema, insertUserSchema } from "@/schema"
-import { apiRequest, queryClient } from "@/lib/query-client"
-import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { z } from "zod"
+import { User, loginSchema, insertUserSchema } from "@/schema"
+import { queryClient, apiRequest } from "@/lib/query-client"
+import { useToast } from "@/hooks/use-toast"
 
-// Types
-export type LoginCredentials = z.infer<typeof loginSchema>
-export type RegisterData = z.infer<typeof insertUserSchema>
-
-// Auth context interface
-interface AuthContextType {
+// Auth context type
+type AuthContextType = {
   user: User | null
   isLoading: boolean
   error: Error | null
-  loginMutation: UseMutationResult<User, Error, LoginCredentials>
-  registerMutation: UseMutationResult<User, Error, RegisterData>
+  loginMutation: UseMutationResult<User, Error, LoginInput>
   logoutMutation: UseMutationResult<void, Error, void>
-  userQuery: UseQueryResult<User | null, Error>
+  registerMutation: UseMutationResult<User, Error, RegisterInput>
 }
 
-// Create auth context
-export const AuthContext = createContext<AuthContextType | null>(null)
-
-// Auth provider props
-interface AuthProviderProps {
-  children: ReactNode
+// Define login input type
+type LoginInput = {
+  email: string
+  password: string
 }
 
-// Auth provider component
-export function AuthProvider({ children }: AuthProviderProps) {
-  const { toast } = useToast()
+// Define register input type (based on insertUserSchema)
+type RegisterInput = {
+  email: string
+  password: string
+  name: string
+  role?: string
+  company?: string
+  jobTitle?: string
+}
+
+// Create the auth context
+const AuthContext = createContext<AuthContextType | null>(null)
+
+// Provider component
+export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
-  const [isInitialized, setIsInitialized] = useState(false)
-
-  // Get user query
-  const userQuery = useQuery<User | null, Error>({
+  const { toast } = useToast()
+  
+  // Query for getting the current user
+  const {
+    data: user,
+    error,
+    isLoading,
+  } = useQuery<User | null, Error>({
     queryKey: ["/api/user"],
-    retry: 0,
+    queryFn: async ({ queryKey }) => {
+      try {
+        const response = await apiRequest("GET", queryKey[0])
+        return await response.json()
+      } catch (error) {
+        if (error.status === 401) {
+          return null
+        }
+        throw error
+      }
+    },
   })
 
   // Login mutation
-  const loginMutation = useMutation<User, Error, LoginCredentials>({
+  const loginMutation = useMutation<User, Error, LoginInput>({
     mutationFn: async (credentials) => {
-      const response = await apiRequest("POST", "/api/auth/login", credentials)
-      return response.json()
+      try {
+        // Validate credentials
+        loginSchema.parse(credentials)
+        
+        const response = await apiRequest("POST", "/api/auth/login", credentials)
+        return await response.json()
+      } catch (error) {
+        throw error
+      }
     },
     onSuccess: (user) => {
+      // Update cache with user data
       queryClient.setQueryData(["/api/user"], user)
+      
+      // Show success toast
       toast({
         title: "Login successful",
         description: `Welcome back, ${user.name}!`,
+        variant: "success",
       })
-      router.push("/")
+      
+      // Redirect to dashboard
+      router.push("/dashboard")
     },
     onError: (error) => {
+      // Show error toast
       toast({
         title: "Login failed",
-        description: error.message,
+        description: error.message || "Invalid email or password",
         variant: "destructive",
       })
     },
   })
 
   // Register mutation
-  const registerMutation = useMutation<User, Error, RegisterData>({
-    mutationFn: async (data) => {
-      const response = await apiRequest("POST", "/api/auth/register", data)
-      return response.json()
+  const registerMutation = useMutation<User, Error, RegisterInput>({
+    mutationFn: async (userData) => {
+      try {
+        // Validate user data
+        insertUserSchema.parse(userData)
+        
+        const response = await apiRequest("POST", "/api/auth/register", userData)
+        return await response.json()
+      } catch (error) {
+        throw error
+      }
     },
     onSuccess: (user) => {
+      // Update cache with user data
       queryClient.setQueryData(["/api/user"], user)
+      
+      // Show success toast
       toast({
         title: "Registration successful",
-        description: `Welcome, ${user.name}!`,
+        description: `Welcome to AI Negotiator, ${user.name}!`,
+        variant: "success",
       })
-      router.push("/")
+      
+      // Redirect to dashboard
+      router.push("/dashboard")
     },
     onError: (error) => {
+      // Show error toast
       toast({
         title: "Registration failed",
-        description: error.message,
+        description: error.message || "Failed to create account",
         variant: "destructive",
       })
     },
@@ -107,59 +151,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await apiRequest("POST", "/api/auth/logout")
     },
     onSuccess: () => {
+      // Clear user data from cache
       queryClient.setQueryData(["/api/user"], null)
-      queryClient.invalidateQueries()
+      
+      // Show success toast
       toast({
-        title: "Logged out",
-        description: "You have been logged out successfully.",
+        title: "Logout successful",
+        description: "You have been logged out",
       })
+      
+      // Redirect to login page
       router.push("/auth")
     },
     onError: (error) => {
+      // Show error toast
       toast({
         title: "Logout failed",
-        description: error.message,
+        description: error.message || "Failed to log out",
         variant: "destructive",
       })
     },
   })
 
-  // Set initialized after first user query completes
-  useEffect(() => {
-    if (!userQuery.isLoading) {
-      setIsInitialized(true)
-    }
-  }, [userQuery.isLoading])
-
-  // Memoize context value
-  const contextValue = useMemo<AuthContextType>(
-    () => ({
-      user: userQuery.data || null,
-      isLoading: !isInitialized || userQuery.isLoading,
-      error: userQuery.error || null,
-      loginMutation,
-      registerMutation,
-      logoutMutation,
-      userQuery,
-    }),
-    [
-      isInitialized,
-      userQuery.data,
-      userQuery.error,
-      userQuery.isLoading,
-      loginMutation,
-      registerMutation,
-      logoutMutation,
-      userQuery,
-    ]
-  )
-
   return (
-    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+    <AuthContext.Provider
+      value={{
+        user: user || null,
+        isLoading,
+        error,
+        loginMutation,
+        logoutMutation,
+        registerMutation,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   )
 }
 
-// Auth hook
+// Hook to use the auth context
 export function useAuth() {
   const context = useContext(AuthContext)
   
