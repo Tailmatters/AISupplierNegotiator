@@ -4,7 +4,7 @@ import * as React from "react"
 import { type ToastActionElement, type ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 1000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -23,7 +23,7 @@ const actionTypes = {
 let count = 0
 
 function generateId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  count = (count + 1) % Number.MAX_VALUE
   return count.toString()
 }
 
@@ -72,7 +72,7 @@ const reducer = (state: State, action: Action): State => {
     case actionTypes.DISMISS_TOAST: {
       const { toastId } = action
 
-      // !HACK: this is a hack for duplicate toasts
+      // Dismiss all toasts
       if (toastId === undefined) {
         return {
           ...state,
@@ -83,15 +83,11 @@ const reducer = (state: State, action: Action): State => {
         }
       }
 
+      // Dismiss specific toast
       return {
         ...state,
         toasts: state.toasts.map((t) =>
-          t.id === toastId || toastId === undefined
-            ? {
-                ...t,
-                open: false,
-              }
-            : t
+          t.id === toastId ? { ...t, open: false } : t
         ),
       }
     }
@@ -99,6 +95,7 @@ const reducer = (state: State, action: Action): State => {
     case actionTypes.REMOVE_TOAST: {
       const { toastId } = action
 
+      // Remove all toasts
       if (toastId === undefined) {
         return {
           ...state,
@@ -106,6 +103,7 @@ const reducer = (state: State, action: Action): State => {
         }
       }
 
+      // Remove specific toast
       return {
         ...state,
         toasts: state.toasts.filter((t) => t.id !== toastId),
@@ -120,7 +118,9 @@ let memoryState: State = { toasts: [] }
 
 function dispatch(action: Action) {
   memoryState = reducer(memoryState, action)
-  listeners.forEach((listener) => listener(memoryState))
+  listeners.forEach((listener) => {
+    listener(memoryState)
+  })
 }
 
 interface Toast extends Omit<ToasterToast, "id"> {}
@@ -143,13 +143,15 @@ function toast({ ...props }: Toast) {
       id,
       open: true,
       onOpenChange: (open) => {
-        if (!open) dismiss()
+        if (!open) {
+          dismiss()
+        }
       },
     },
   })
 
   return {
-    id: id,
+    id,
     dismiss,
     update,
   }

@@ -1,87 +1,76 @@
-import { type ClassValue, clsx } from "clsx"
+import { ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 /**
- * Combines Tailwind CSS classes with the power of clsx for conditional classes
- * and tailwind-merge to resolve conflicts
+ * Combines multiple class names/class values into a single string
+ * Used for merging Tailwind CSS classes in components
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Format currency values consistently in the application
+ * Format a date with options
+ * @param date Date to format
+ * @param options Intl.DateTimeFormatOptions for formatting
+ * @returns Formatted date string
  */
-export function formatCurrency(amount: number): string {
+export function formatDate(
+  date: Date | string | number,
+  options: Intl.DateTimeFormatOptions = {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  }
+) {
+  return new Intl.DateTimeFormat("en-US", {
+    ...options
+  }).format(new Date(date))
+}
+
+/**
+ * Format a currency value
+ * @param amount Number to format as currency
+ * @param currency Currency code (default: USD)
+ * @returns Formatted currency string
+ */
+export function formatCurrency(
+  amount: number,
+  currency: string = "USD",
+  options: Intl.NumberFormatOptions = {}
+) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency,
+    maximumFractionDigits: 2,
+    ...options
   }).format(amount)
 }
 
 /**
- * Format large numbers with commas for better readability
+ * Format a percentage value
+ * @param value Number to format as percentage
+ * @param digits Number of decimal digits to display
+ * @returns Formatted percentage string
  */
-export function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value)
-}
-
-/**
- * Format percentage values
- */
-export function formatPercent(value: number): string {
+export function formatPercentage(value: number, digits: number = 2) {
   return new Intl.NumberFormat("en-US", {
     style: "percent",
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
   }).format(value / 100)
 }
 
 /**
- * Format date objects using Intl.DateTimeFormat
- */
-export function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date)
-}
-
-/**
- * Truncate a string to specified length with ellipsis
- */
-export function truncate(str: string, length: number): string {
-  return str.length > length ? `${str.substring(0, length)}...` : str
-}
-
-/**
- * Safely access nested object properties
- */
-export function get(obj: any, path: string, defaultValue: any = undefined) {
-  const travel = (regexp: RegExp) =>
-    String.prototype.split
-      .call(path, regexp)
-      .filter(Boolean)
-      .reduce(
-        (res, key) => (res !== null && res !== undefined ? res[key] : res),
-        obj
-      )
-  const result = travel(/[,[\]]+?/) || travel(/[,[\].]+?/)
-  return result === undefined || result === obj ? defaultValue : result
-}
-
-/**
- * Delay execution for a specified time (in ms)
+ * Creates a delay promise
+ * @param ms Milliseconds to delay
+ * @returns Promise that resolves after the specified delay
  */
 export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**
- * Generate a random ID
+ * Check if the current environment is a browser
  */
-export function generateId(length: number = 8): string {
-  return Math.random()
-    .toString(36)
-    .substring(2, 2 + length)
-}
+export const isBrowser = typeof window !== "undefined"

@@ -1,55 +1,92 @@
 import { Pool, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-serverless'
-import ws from 'ws'
+import { eq } from 'drizzle-orm'
 import * as schema from '@/schema'
+import type { InsertUser, User } from '@/schema'
+import ws from 'ws'
 
-// Configure Neon connection
+// Configure WebSocket for Neon serverless
 neonConfig.webSocketConstructor = ws
 
-// Ensure DATABASE_URL is set
+// Check for environment variables
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set")
+  throw new Error('DATABASE_URL environment variable is required')
 }
 
-// Create a connection pool
+// Create a new pool and client
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-
-// Create a Drizzle instance
 export const db = drizzle(pool, { schema })
 
-// Connection helper for testing database connectivity
-export async function testConnection() {
+// User functions
+export async function getUserById(id: number): Promise<User | undefined> {
   try {
-    const result = await pool.query('SELECT NOW()')
-    return { success: true, timestamp: result.rows[0].now }
-  } catch (error: any) {
-    console.error('Database connection error:', error)
-    return { success: false, error: error.message }
+    const [user] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id))
+      .limit(1)
+    
+    return user
+  } catch (error) {
+    console.error('Error fetching user by ID:', error)
+    throw error
   }
 }
 
-// User operations for the database
-export async function getUserByEmail(email: string) {
-  const [user] = await db.select().from(schema.users).where(
-    (users) => users.email === email
-  ).execute()
-  
-  return user
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  try {
+    const [user] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email))
+      .limit(1)
+    
+    return user
+  } catch (error) {
+    console.error('Error fetching user by email:', error)
+    throw error
+  }
 }
 
-export async function getUserById(id: number) {
-  const [user] = await db.select().from(schema.users).where(
-    (users) => users.id === id
-  ).execute()
-  
-  return user
+export async function createUser(userData: InsertUser): Promise<User> {
+  try {
+    const [user] = await db
+      .insert(schema.users)
+      .values(userData)
+      .returning()
+    
+    return user
+  } catch (error) {
+    console.error('Error creating user:', error)
+    throw error
+  }
 }
 
-export async function createUser(userData: schema.InsertUser) {
-  const [user] = await db.insert(schema.users)
-    .values(userData)
-    .returning()
-    .execute()
-  
-  return user
+export async function updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined> {
+  try {
+    const [updatedUser] = await db
+      .update(schema.users)
+      .set(userData)
+      .where(eq(schema.users.id, id))
+      .returning()
+    
+    return updatedUser
+  } catch (error) {
+    console.error('Error updating user:', error)
+    throw error
+  }
+}
+
+export async function deleteUser(id: number): Promise<boolean> {
+  try {
+    const result = await db
+      .delete(schema.users)
+      .where(eq(schema.users.id, id))
+      .returning({ id: schema.users.id })
+    
+    return result.length > 0
+  } catch (error) {
+    console.error('Error deleting user:', error)
+    throw error
+  }
 }
