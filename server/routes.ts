@@ -815,7 +815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized to create invitations
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to create invitations for this negotiation" });
       }
       
@@ -1060,7 +1060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized to view proposals
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to view proposals for this negotiation" });
       }
       
@@ -1100,7 +1100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get negotiation to verify user permission
       const negotiation = await storage.getNegotiation(proposal.negotiationId);
       
-      if (!negotiation || negotiation.createdBy !== req.user!.id) {
+      if (!negotiation || negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to update this proposal" });
       }
       
@@ -1137,7 +1137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to rate this negotiation" });
       }
       
@@ -1176,7 +1176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user is authorized to complete this negotiation
-      if (negotiation.createdBy !== req.user!.id) {
+      if (negotiation.userId !== req.user!.id) {
         return res.status(403).json({ message: "Not authorized to complete this negotiation" });
       }
       
@@ -1368,7 +1368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Negotiation not found" });
       }
       
-      if (negotiation.createdBy !== userId) {
+      if (negotiation.userId !== userId) {
         return res.status(403).json({ error: "You don't have permission to create contracts for this negotiation" });
       }
       
@@ -1419,7 +1419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the negotiation to verify ownership
       const negotiation = await storage.getNegotiation(contract.negotiationId);
       
-      if (negotiation && negotiation.createdBy !== userId) {
+      if (negotiation && negotiation.userId !== userId) {
         return res.status(403).json({ error: "You don't have permission to update this contract" });
       }
       
