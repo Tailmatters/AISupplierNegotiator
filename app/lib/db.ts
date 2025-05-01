@@ -3,21 +3,43 @@ import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from 'ws';
 import * as schema from '@/schema';
 
-// Configure Neon to use WebSockets in environments like Vercel
+// Configure WebSocket for Neon Postgres
 neonConfig.webSocketConstructor = ws;
 
-// Ensure we have a DATABASE_URL
+// Check for DATABASE_URL
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?"
-  );
+  throw new Error('DATABASE_URL environment variable is not set');
 }
 
 // Create a connection pool
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 5000, // 5 seconds
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed (30 seconds)
+  ssl: true,
+});
 
-// Create a Drizzle ORM instance with all our schema tables
+// Handle pool errors globally to prevent the app from crashing
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle database client', err);
+});
+
+// Create a Drizzle ORM instance
 export const db = drizzle(pool, { schema });
 
-// Export the pool in case we need direct access
+// Function to test database connection
+export async function testDatabaseConnection() {
+  try {
+    const client = await pool.connect();
+    client.release();
+    console.log('Successfully connected to database');
+    return true;
+  } catch (err) {
+    console.error('Error connecting to database:', err);
+    return false;
+  }
+}
+
+// Export pool for direct queries if needed
 export { pool };

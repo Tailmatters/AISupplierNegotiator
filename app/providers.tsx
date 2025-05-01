@@ -15,12 +15,15 @@ interface ProvidersProps {
  */
 export function Providers({ children }: ProvidersProps) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <QueryProvider>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
-      </QueryProvider>
-    </ThemeProvider>
+    <QueryProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <AuthProvider>{children}</AuthProvider>
+      </ThemeProvider>
+    </QueryProvider>
   );
 }

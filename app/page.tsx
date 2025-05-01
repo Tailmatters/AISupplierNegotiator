@@ -1,188 +1,143 @@
 "use client";
 
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-
+/**
+ * Dashboard page / Home page for the procurement platform
+ */
 export default function HomePage() {
+  const { user, isLoading } = useAuth();
   const router = useRouter();
-  const { user, isLoading, logoutMutation } = useAuth();
 
-  // If still loading, show loading state
+  // Redirect to auth page if not logged in
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/auth");
+    }
+  }, [isLoading, user, router]);
+
+  // Show loading spinner while checking authentication
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  // This should not happen due to middleware redirecting, but just in case
+  // If not logged in, show nothing (redirecting)
   if (!user) {
-    router.push("/auth");
     return null;
   }
 
+  // Show dashboard for authenticated user
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-background">
-        <div className="container flex h-16 items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-6 w-6"
-            >
-              <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
-            </svg>
-            <span className="font-bold">AI Negotiator Pro</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-muted-foreground">
-              Welcome, {user.name}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-            >
-              {logoutMutation.isPending ? "Signing out..." : "Sign out"}
-            </Button>
-          </div>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold gradient-heading">AI Procurement Negotiator</h1>
+        <p className="text-muted-foreground">Your intelligent procurement assistant</p>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1">
-        <div className="container py-4 md:py-8">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {/* Dashboard card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Dashboard</CardTitle>
-                <CardDescription>View your personalized dashboard</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Get a comprehensive overview of your procurement activities, supplier performance and KPIs.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">View Dashboard</Button>
-              </CardFooter>
-            </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Quick actions card */}
+        <div className="col-span-1 row-span-1 bg-card rounded-lg shadow p-6 hover-card">
+          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+          <ul className="space-y-2">
+            <li className="p-2 hover:bg-muted rounded-md transition-colors">
+              <a href="/negotiations/new" className="flex items-center gap-2">
+                <span className="bg-primary/10 p-2 rounded-full text-primary">+</span>
+                <span>Start New Negotiation</span>
+              </a>
+            </li>
+            <li className="p-2 hover:bg-muted rounded-md transition-colors">
+              <a href="/suppliers" className="flex items-center gap-2">
+                <span className="bg-primary/10 p-2 rounded-full text-primary">👥</span>
+                <span>Manage Suppliers</span>
+              </a>
+            </li>
+            <li className="p-2 hover:bg-muted rounded-md transition-colors">
+              <a href="/spend-analysis" className="flex items-center gap-2">
+                <span className="bg-primary/10 p-2 rounded-full text-primary">📊</span>
+                <span>Upload Spend Data</span>
+              </a>
+            </li>
+            <li className="p-2 hover:bg-muted rounded-md transition-colors">
+              <a href="/contracts" className="flex items-center gap-2">
+                <span className="bg-primary/10 p-2 rounded-full text-primary">📄</span>
+                <span>View Contracts</span>
+              </a>
+            </li>
+          </ul>
+        </div>
 
-            {/* Negotiations card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Negotiations</CardTitle>
-                <CardDescription>Manage your active negotiations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Monitor ongoing negotiations, start new ones, and review negotiation history with AI assistance.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">View Negotiations</Button>
-              </CardFooter>
-            </Card>
-
-            {/* Suppliers card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Suppliers</CardTitle>
-                <CardDescription>Manage your supplier database</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Add new suppliers, view performance metrics, and manage supplier relationships.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">View Suppliers</Button>
-              </CardFooter>
-            </Card>
-
-            {/* Contracts card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Contracts</CardTitle>
-                <CardDescription>Manage your contracts</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Create, review, and manage contract templates and active contracts with suppliers.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">View Contracts</Button>
-              </CardFooter>
-            </Card>
-
-            {/* Spend Analysis card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Spend Analysis</CardTitle>
-                <CardDescription>Analyze your procurement spend</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Upload and analyze spend data to identify savings opportunities and optimization areas.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">View Spend Analysis</Button>
-              </CardFooter>
-            </Card>
-
-            {/* Market Analysis card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Market Analysis</CardTitle>
-                <CardDescription>Explore market insights</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Get Porter's Five Forces analysis and market intelligence for your procurement categories.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">View Market Analysis</Button>
-              </CardFooter>
-            </Card>
+        {/* Active negotiations card */}
+        <div className="col-span-2 row-span-1 bg-card rounded-lg shadow p-6 hover-card">
+          <h2 className="text-xl font-semibold mb-4">Active Negotiations</h2>
+          <div className="space-y-4">
+            <div className="p-4 border rounded-md">
+              <div className="flex justify-between">
+                <h3 className="font-medium">Office Supplies Contract</h3>
+                <span className="badge badge-primary">In Progress</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Negotiating with OfficeMax for Q2 office supplies
+              </p>
+              <div className="flex justify-between mt-2">
+                <span className="text-sm">Started 3 days ago</span>
+                <a href="/negotiations/1" className="text-sm text-primary hover:underline">
+                  View Details
+                </a>
+              </div>
+            </div>
+            <div className="p-4 border rounded-md">
+              <div className="flex justify-between">
+                <h3 className="font-medium">IT Hardware Renewal</h3>
+                <span className="badge badge-warning">Pending Response</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Waiting for TechSupplies Inc. to respond to latest proposal
+              </p>
+              <div className="flex justify-between mt-2">
+                <span className="text-sm">Started 1 week ago</span>
+                <a href="/negotiations/2" className="text-sm text-primary hover:underline">
+                  View Details
+                </a>
+              </div>
+            </div>
           </div>
         </div>
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t bg-muted py-4">
-        <div className="container flex flex-col gap-2 md:flex-row md:gap-4">
-          <p className="text-center text-sm text-muted-foreground md:text-left">
-            &copy; {new Date().getFullYear()} AI Negotiator Pro. All rights reserved.
-          </p>
-          <div className="md:ml-auto flex justify-center gap-4 md:justify-end">
-            <Button variant="link" size="sm" className="text-muted-foreground">
-              Terms
-            </Button>
-            <Button variant="link" size="sm" className="text-muted-foreground">
-              Privacy
-            </Button>
-            <Button variant="link" size="sm" className="text-muted-foreground">
-              Contact
-            </Button>
+        {/* Spend analysis summary */}
+        <div className="col-span-1 md:col-span-3 bg-card rounded-lg shadow p-6 hover-card">
+          <h2 className="text-xl font-semibold mb-4">Spend Summary</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-muted/40 p-4 rounded-md text-center">
+              <div className="text-2xl font-bold text-primary">$1.2M</div>
+              <div className="text-sm text-muted-foreground">Total Annual Spend</div>
+            </div>
+            <div className="bg-muted/40 p-4 rounded-md text-center">
+              <div className="text-2xl font-bold text-primary">42</div>
+              <div className="text-sm text-muted-foreground">Active Suppliers</div>
+            </div>
+            <div className="bg-muted/40 p-4 rounded-md text-center">
+              <div className="text-2xl font-bold text-primary">12%</div>
+              <div className="text-sm text-muted-foreground">Savings Opportunity</div>
+            </div>
+            <div className="bg-muted/40 p-4 rounded-md text-center">
+              <div className="text-2xl font-bold text-primary">8</div>
+              <div className="text-sm text-muted-foreground">Categories</div>
+            </div>
+          </div>
+          <div className="mt-4 text-right">
+            <a href="/spend-analysis" className="text-sm text-primary hover:underline">
+              View Detailed Analysis
+            </a>
           </div>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
