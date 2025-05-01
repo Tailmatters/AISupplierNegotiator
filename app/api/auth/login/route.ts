@@ -1,70 +1,58 @@
-import { NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
-import { createToken, setAuthCookie, verifyPassword } from "@/lib/auth"
-import { loginSchema } from "@/schema"
-import * as db from "@/lib/db"
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { login, generateToken, setAuthCookie } from "@/lib/auth";
+import { loginSchema } from "@/schema";
+import { db } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    const body = await request.json()
+    const body = await request.json();
     
-    // Validate request body
-    const result = loginSchema.safeParse(body)
+    // Validate the request body
+    const validatedData = loginSchema.parse(body);
     
-    if (!result.success) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 400 }
-      )
-    }
-    
-    // Get user from database
-    const user = await db.getUserByEmail(body.email)
+    // Attempt to log in the user
+    const user = await login(validatedData.username, validatedData.password);
     
     if (!user) {
       return NextResponse.json(
-        { error: "Invalid email or password" },
+        { error: "Invalid username or password" },
         { status: 401 }
-      )
+      );
     }
     
-    // Verify password
-    const isPasswordValid = await verifyPassword(body.password, user.password)
+    // Generate a JWT token
+    const token = await generateToken(user);
     
-    if (!isPasswordValid) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      )
-    }
-    
-    // Create JWT token
-    const token = await createToken(user)
-    
-    // Create response
+    // Create the response
     const response = NextResponse.json(
-      { 
+      {
         id: user.id,
-        email: user.email,
+        username: user.username,
         name: user.name,
+        email: user.email,
         role: user.role,
-        company: user.company,
-        jobTitle: user.jobTitle,
       },
       { status: 200 }
-    )
+    );
     
-    // Set auth cookie
-    await setAuthCookie(response, token)
+    // Set the auth cookie in the response
+    await setAuthCookie(response, token);
     
-    return response
+    return response;
   } catch (error) {
-    console.error("Login error:", error)
+    console.error("Login error:", error);
+    
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Validation error", details: error.errors },
+        { status: 400 }
+      );
+    }
     
     return NextResponse.json(
       { error: "Authentication failed" },
       { status: 500 }
-    )
+    );
   }
 }

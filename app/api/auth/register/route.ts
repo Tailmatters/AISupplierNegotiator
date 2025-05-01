@@ -1,69 +1,89 @@
-import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { createUser, getUserByEmail } from "@/lib/db"
-import { hashPassword, createToken } from "@/lib/auth"
-import { insertUserSchema } from "@/schema"
-import { z } from "zod"
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { hashPassword, generateToken, setAuthCookie } from "@/lib/auth";
+import { insertUserSchema, users } from "@/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    const body = await request.json()
+    const body = await request.json();
     
-    // Validate request body
-    const validatedData = insertUserSchema.parse(body)
+    // Validate the request body
+    const validatedData = insertUserSchema.parse(body);
     
-    // Check if user with the same email already exists
-    const existingUser = await getUserByEmail(validatedData.email)
+    // Check if the username already exists
+    const existingUser = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, validatedData.username))
+      .limit(1);
     
-    if (existingUser) {
+    if (existingUser.length > 0) {
       return NextResponse.json(
-        { error: "Email already in use" },
+        { error: "Username already exists" },
         { status: 400 }
-      )
+      );
     }
     
-    // Hash password
-    const hashedPassword = await hashPassword(validatedData.password)
+    // Check if the email already exists
+    const existingEmail = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, validatedData.email))
+      .limit(1);
     
-    // Create user with hashed password
-    const newUser = await createUser({
-      ...validatedData,
-      password: hashedPassword,
-    })
+    if (existingEmail.length > 0) {
+      return NextResponse.json(
+        { error: "Email already exists" },
+        { status: 400 }
+      );
+    }
     
-    // Create token
-    const token = await createToken(newUser)
+    // Hash the password
+    const hashedPassword = await hashPassword(validatedData.password);
     
-    // Set token as cookie
-    const cookieStore = cookies()
-    cookieStore.set({
-      name: "token",
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    })
+    // Create the user
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        ...validatedData,
+        password: hashedPassword,
+      })
+      .returning();
     
-    // Return user data without password
-    const { password, ...userWithoutPassword } = newUser
+    // Generate a JWT token
+    const token = await generateToken(newUser);
     
-    return NextResponse.json(userWithoutPassword, { status: 201 })
+    // Create the response
+    const response = NextResponse.json(
+      {
+        id: newUser.id,
+        username: newUser.username,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+      },
+      { status: 201 }
+    );
+    
+    // Set the auth cookie in the response
+    await setAuthCookie(response, token);
+    
+    return response;
   } catch (error) {
+    console.error("Registration error:", error);
+    
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Invalid registration data", details: error.format() },
+        { error: "Validation error", details: error.errors },
         { status: 400 }
-      )
+      );
     }
     
-    console.error("Registration error:", error)
-    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Registration failed" },
-      { status: 400 }
-    )
+      { error: "Registration failed" },
+      { status: 500 }
+    );
   }
 }

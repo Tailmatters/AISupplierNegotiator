@@ -1,201 +1,200 @@
-"use client"
+"use client";
 
 import {
   createContext,
-  ReactNode,
   useContext,
   useEffect,
   useState,
-} from "react"
+  ReactNode,
+} from "react";
 import {
   useQuery,
   useMutation,
   UseMutationResult,
-} from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
-import { User, loginSchema, insertUserSchema } from "@/schema"
-import { queryClient, apiRequest } from "@/lib/query-client"
-import { useToast } from "@/hooks/use-toast"
+  useQueryClient,
+} from "@tanstack/react-query";
 
-// Auth context type
+import { User, loginSchema, insertUserSchema } from "@/schema";
+import { apiRequest, getQueryFn } from "@/lib/query-client";
+import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
+
+// Define the shape of our auth context
 type AuthContextType = {
-  user: User | null
-  isLoading: boolean
-  error: Error | null
-  loginMutation: UseMutationResult<User, Error, LoginInput>
-  logoutMutation: UseMutationResult<void, Error, void>
-  registerMutation: UseMutationResult<User, Error, RegisterInput>
-}
+  user: User | null;
+  isLoading: boolean;
+  error: Error | null;
+  loginMutation: UseMutationResult<User, Error, LoginData>;
+  registerMutation: UseMutationResult<User, Error, RegisterData>;
+  logoutMutation: UseMutationResult<void, Error, void>;
+};
 
-// Define login input type
-type LoginInput = {
-  email: string
-  password: string
-}
+// Types for login and register data
+type LoginData = {
+  username: string;
+  password: string;
+};
 
-// Define register input type (based on insertUserSchema)
-type RegisterInput = {
-  email: string
-  password: string
-  name: string
-  role?: string
-  company?: string
-  jobTitle?: string
-}
+type RegisterData = {
+  username: string;
+  email: string;
+  password: string;
+  name: string;
+  role?: string;
+  company?: string;
+};
 
 // Create the auth context
-const AuthContext = createContext<AuthContextType | null>(null)
+const AuthContext = createContext<AuthContextType | null>(null);
 
-// Provider component
+// Auth provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const router = useRouter()
-  const { toast } = useToast()
+  const { toast } = useToast();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   
-  // Query for getting the current user
+  // Query to get the current user
   const {
     data: user,
     error,
     isLoading,
   } = useQuery<User | null, Error>({
     queryKey: ["/api/user"],
-    queryFn: async ({ queryKey }) => {
-      try {
-        const response = await apiRequest("GET", queryKey[0])
-        return await response.json()
-      } catch (error) {
-        if (error.status === 401) {
-          return null
-        }
-        throw error
-      }
-    },
-  })
-
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false,
+  });
+  
   // Login mutation
-  const loginMutation = useMutation<User, Error, LoginInput>({
-    mutationFn: async (credentials) => {
+  const loginMutation = useMutation<User, Error, LoginData>({
+    mutationFn: async (data) => {
       try {
-        // Validate credentials
-        loginSchema.parse(credentials)
+        // Validate data using zod schema
+        loginSchema.parse(data);
         
-        const response = await apiRequest("POST", "/api/auth/login", credentials)
-        return await response.json()
-      } catch (error) {
-        throw error
+        // Send login request
+        const response = await apiRequest("POST", "/api/auth/login", data);
+        return response;
+      } catch (err: any) {
+        if (err.errors) {
+          // This is a zod validation error
+          throw new Error("Invalid login data: " + JSON.stringify(err.errors));
+        }
+        throw err;
       }
     },
-    onSuccess: (user) => {
-      // Update cache with user data
-      queryClient.setQueryData(["/api/user"], user)
+    onSuccess: (userData) => {
+      // Update the user query with the new user data
+      queryClient.setQueryData(["/api/user"], userData);
       
       // Show success toast
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.name}!`,
-        variant: "success",
-      })
+        description: `Welcome back, ${userData.name}!`,
+      });
       
       // Redirect to dashboard
-      router.push("/dashboard")
+      router.push("/");
     },
-    onError: (error) => {
+    onError: (err) => {
       // Show error toast
       toast({
         title: "Login failed",
-        description: error.message || "Invalid email or password",
+        description: err.message || "Could not log in. Please try again.",
         variant: "destructive",
-      })
+      });
     },
-  })
-
+  });
+  
   // Register mutation
-  const registerMutation = useMutation<User, Error, RegisterInput>({
-    mutationFn: async (userData) => {
+  const registerMutation = useMutation<User, Error, RegisterData>({
+    mutationFn: async (data) => {
       try {
-        // Validate user data
-        insertUserSchema.parse(userData)
+        // Validate data using zod schema
+        insertUserSchema.parse(data);
         
-        const response = await apiRequest("POST", "/api/auth/register", userData)
-        return await response.json()
-      } catch (error) {
-        throw error
+        // Send register request
+        const response = await apiRequest("POST", "/api/auth/register", data);
+        return response;
+      } catch (err: any) {
+        if (err.errors) {
+          // This is a zod validation error
+          throw new Error("Invalid registration data: " + JSON.stringify(err.errors));
+        }
+        throw err;
       }
     },
-    onSuccess: (user) => {
-      // Update cache with user data
-      queryClient.setQueryData(["/api/user"], user)
+    onSuccess: (userData) => {
+      // Update the user query with the new user data
+      queryClient.setQueryData(["/api/user"], userData);
       
       // Show success toast
       toast({
         title: "Registration successful",
-        description: `Welcome to AI Negotiator, ${user.name}!`,
-        variant: "success",
-      })
+        description: `Welcome, ${userData.name}!`,
+      });
       
       // Redirect to dashboard
-      router.push("/dashboard")
+      router.push("/");
     },
-    onError: (error) => {
+    onError: (err) => {
       // Show error toast
       toast({
         title: "Registration failed",
-        description: error.message || "Failed to create account",
+        description: err.message || "Could not register. Please try again.",
         variant: "destructive",
-      })
+      });
     },
-  })
-
+  });
+  
   // Logout mutation
   const logoutMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/auth/logout")
+      await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
-      // Clear user data from cache
-      queryClient.setQueryData(["/api/user"], null)
+      // Clear user data from query cache
+      queryClient.setQueryData(["/api/user"], null);
       
       // Show success toast
       toast({
-        title: "Logout successful",
-        description: "You have been logged out",
-      })
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
       
       // Redirect to login page
-      router.push("/auth")
+      router.push("/auth");
     },
-    onError: (error) => {
+    onError: (err) => {
       // Show error toast
       toast({
         title: "Logout failed",
-        description: error.message || "Failed to log out",
+        description: err.message || "Could not log out. Please try again.",
         variant: "destructive",
-      })
+      });
     },
-  })
-
+  });
+  
   return (
     <AuthContext.Provider
       value={{
-        user: user || null,
+        user,
         isLoading,
         error,
         loginMutation,
-        logoutMutation,
         registerMutation,
+        logoutMutation,
       }}
     >
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
-// Hook to use the auth context
+// Hook to use auth context
 export function useAuth() {
-  const context = useContext(AuthContext)
-  
+  const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  
-  return context
+  return context;
 }

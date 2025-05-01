@@ -1,70 +1,59 @@
-import { NextRequest, NextResponse } from "next/server"
-import { verifyToken, AUTH_ERRORS } from "@/lib/auth"
-
-// Define the public paths that don't require authentication
-const publicPaths = ["/auth", "/api/auth/login", "/api/auth/register"]
-
-// Check if a path is in the public paths list
-const isPublicPath = (path: string) => {
-  return publicPaths.some((publicPath) => path.startsWith(publicPath))
-}
+import { NextResponse, NextRequest } from "next/server";
+import { authenticateRequest } from "@/lib/auth";
 
 export async function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname
+  // Paths that don't require authentication
+  const publicPaths = [
+    "/auth",
+    "/api/auth/login", 
+    "/api/auth/register",
+    "/_next",
+    "/favicon.ico"
+  ];
   
-  // Skip authentication middleware for public paths
-  if (isPublicPath(path)) {
-    return NextResponse.next()
+  // Check if the path is public
+  const isPublicPath = publicPaths.some(path => 
+    request.nextUrl.pathname === path || 
+    request.nextUrl.pathname.startsWith(path + "/")
+  );
+  
+  // Allow public paths without authentication
+  if (isPublicPath) {
+    return NextResponse.next();
   }
   
-  // For API routes, we validate the token and return an appropriate response
-  if (path.startsWith("/api")) {
-    const token = request.cookies.get("token")?.value
-    
-    if (!token) {
-      return NextResponse.json(
-        { error: AUTH_ERRORS.UNAUTHORIZED },
-        { status: 401 }
-      )
-    }
-    
-    const payload = await verifyToken(token)
-    
-    if (!payload) {
-      return NextResponse.json(
-        { error: AUTH_ERRORS.INVALID_TOKEN },
-        { status: 401 }
-      )
-    }
-    
-    return NextResponse.next()
+  // Check if it's an API route
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
+  
+  // For API routes, allow the request but let the individual API handlers
+  // enforce authentication as needed
+  if (isApiRoute) {
+    return NextResponse.next();
   }
   
-  // For non-API protected routes, we redirect to login
-  const token = request.cookies.get("token")?.value
+  // For non-API routes that require authentication, check if the user is authenticated
+  const user = await authenticateRequest(request);
   
-  if (!token) {
-    const url = new URL("/auth", request.url)
-    url.searchParams.set("callbackUrl", encodeURI(request.url))
-    return NextResponse.redirect(url)
+  // If not authenticated, redirect to the login page
+  if (!user) {
+    const loginUrl = new URL("/auth", request.url);
+    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
   
-  // Verify the token, if invalid redirect to login
-  const payload = await verifyToken(token)
-  
-  if (!payload) {
-    const url = new URL("/auth", request.url)
-    url.searchParams.set("callbackUrl", encodeURI(request.url))
-    return NextResponse.redirect(url)
-  }
-  
-  return NextResponse.next()
+  // User is authenticated, allow the request
+  return NextResponse.next();
 }
 
-// Configure which routes use this middleware
+// Specify which paths the middleware should run on
 export const config = {
   matcher: [
-    // Match all paths except static files, images, etc.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)",
+    /*
+     * Match all request paths except for:
+     * - static files (/_next/, /images/, etc.)
+     * - API routes that handle authentication themselves
+     * - authentication-related routes
+     */
+    "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
-}
+};
