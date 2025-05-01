@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { authenticateUser, createToken } from "@/lib/auth"
-import { loginSchema } from "@/schema"
 import { z } from "zod"
+import { createToken, setAuthCookie, verifyPassword } from "@/lib/auth"
+import { loginSchema } from "@/schema"
+import * as db from "@/lib/db"
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,43 +10,61 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Validate request body
-    const validatedData = loginSchema.parse(body)
+    const result = loginSchema.safeParse(body)
     
-    // Authenticate user
-    const user = await authenticateUser(validatedData.email, validatedData.password)
-    
-    // Create token
-    const token = await createToken(user)
-    
-    // Set token as cookie
-    const cookieStore = cookies()
-    cookieStore.set({
-      name: "token",
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    })
-    
-    // Return user data without password
-    const { password, ...userWithoutPassword } = user
-    
-    return NextResponse.json(userWithoutPassword, { status: 200 })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Invalid login data", details: error.format() },
+        { error: "Invalid email or password" },
         { status: 400 }
       )
     }
     
+    // Get user from database
+    const user = await db.getUserByEmail(body.email)
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: "Invalid email or password" },
+        { status: 401 }
+      )
+    }
+    
+    // Verify password
+    const isPasswordValid = await verifyPassword(body.password, user.password)
+    
+    if (!isPasswordValid) {
+      return NextResponse.json(
+        { error: "Invalid email or password" },
+        { status: 401 }
+      )
+    }
+    
+    // Create JWT token
+    const token = await createToken(user)
+    
+    // Create response
+    const response = NextResponse.json(
+      { 
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        company: user.company,
+        jobTitle: user.jobTitle,
+      },
+      { status: 200 }
+    )
+    
+    // Set auth cookie
+    await setAuthCookie(response, token)
+    
+    return response
+  } catch (error) {
     console.error("Login error:", error)
     
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Authentication failed" },
-      { status: 401 }
+      { error: "Authentication failed" },
+      { status: 500 }
     )
   }
 }
