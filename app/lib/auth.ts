@@ -1,180 +1,160 @@
-import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { jwt } from "next-auth/jwt"
-import * as db from "@/lib/db"
-import * as schema from "@/schema"
-import bcrypt from "bcryptjs"
+import { NextRequest, NextResponse } from "next/server";
+import { SignJWT, jwtVerify } from "jose";
+import { JWTPayload } from "next-auth/jwt";
+import { db } from "@/lib/db";
+import { User, users } from "@/schema";
+import { eq } from "drizzle-orm";
+import { cookies } from "next/headers";
+import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { promisify } from "util";
 
 // Constants
-const JWT_SECRET = process.env.SESSION_SECRET || "super-secret-key-change-in-production"
-const TOKEN_NAME = "auth_token"
-const TOKEN_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
+const JWT_SECRET = process.env.SESSION_SECRET || "your-secret-key";
+const COOKIE_NAME = "auth-token";
+const EXPIRATION = 60 * 60 * 24 * 7; // 7 days in seconds
 
-// JWT token type
-type JwtToken = {
-  id: number
-  name: string
-  email: string
-  role: string
-  iat: number
-  exp: number
+// Helper functions for password hashing
+const scryptAsync = promisify(scrypt);
+
+export async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${buf.toString("hex")}.${salt}`;
 }
 
-/**
- * Hash a password
- */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10)
-  const hashedPassword = await bcrypt.hash(password, salt)
-  return hashedPassword
+export async function comparePasswords(supplied: string, stored: string) {
+  const [hashed, salt] = stored.split(".");
+  const hashedBuf = Buffer.from(hashed, "hex");
+  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+  return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-/**
- * Verify a password against a hash
- */
-export async function verifyPassword(
-  password: string,
-  hashedPassword: string
-): Promise<boolean> {
-  const isValid = await bcrypt.compare(password, hashedPassword)
-  return isValid
-}
-
-/**
- * Create a JWT token for a user
- */
-export async function createToken(user: schema.User): Promise<string> {
-  const { id, name, email, role } = user
-  
-  // Create the JWT token
-  const token = await jwt.encode({
-    secret: JWT_SECRET,
-    token: {
-      id,
-      name,
-      email,
-      role,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + TOKEN_MAX_AGE,
-    },
-  })
-  
-  return token
-}
-
-/**
- * Verify and decode a JWT token
- */
-export async function verifyToken(token: string): Promise<JwtToken | null> {
+// Authentication functions
+export async function login(username: string, password: string): Promise<User | null> {
   try {
-    // Verify and decode the JWT token
-    const decoded = await jwt.decode({
-      token,
-      secret: JWT_SECRET,
-    })
-    
-    return decoded as JwtToken
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
+
+    if (!user) {
+      return null;
+    }
+
+    const isPasswordValid = await comparePasswords(password, user.password);
+    if (!isPasswordValid) {
+      return null;
+    }
+
+    return user;
   } catch (error) {
-    console.error("Error verifying token:", error)
-    return null
+    console.error("Login error:", error);
+    return null;
   }
 }
 
-/**
- * Set the auth token cookie
- */
-export async function setAuthCookie(
-  response: NextResponse,
-  token: string
-): Promise<void> {
-  // Set the auth cookie with the token
-  cookies().set({
-    name: TOKEN_NAME,
+// JWT token functions
+export async function generateToken(user: User): Promise<string> {
+  const payload: JWTPayload & { userId: number; role: string } = {
+    userId: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    sub: String(user.id),
+    exp: Math.floor(Date.now() / 1000) + EXPIRATION,
+  };
+
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(new TextEncoder().encode(JWT_SECRET));
+}
+
+export async function verifyToken(token: string): Promise<JWTPayload | null> {
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(JWT_SECRET)
+    );
+    return payload;
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function getUserFromToken(token: string): Promise<User | null> {
+  const payload = await verifyToken(token);
+  if (!payload || !payload.userId) {
+    return null;
+  }
+
+  try {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, payload.userId as number));
+    return user || null;
+  } catch (error) {
+    console.error("Error fetching user from token:", error);
+    return null;
+  }
+}
+
+// Cookie management
+export async function setAuthCookie(response: NextResponse, token: string) {
+  const cookieStore = cookies();
+  cookieStore.set({
+    name: COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    maxAge: TOKEN_MAX_AGE,
     path: "/",
-    sameSite: "lax",
-  })
+    secure: process.env.NODE_ENV === "production",
+    maxAge: EXPIRATION,
+  });
 }
 
-/**
- * Get the auth token from cookies
- */
-export async function getAuthCookie(): Promise<string | undefined> {
-  // Get the auth cookie
-  const cookie = cookies().get(TOKEN_NAME)
-  return cookie?.value
-}
-
-/**
- * Clear the auth token cookie
- */
-export async function clearAuthCookie(): Promise<void> {
-  // Clear the auth cookie
-  cookies().delete(TOKEN_NAME)
-}
-
-/**
- * Get the current user from the request
- */
-export async function getServerUser(): Promise<schema.User | null> {
-  try {
-    // Get the token from cookie
-    const token = await getAuthCookie()
-    
-    if (!token) {
-      return null
-    }
-    
-    // Verify and decode the token
-    const decoded = await verifyToken(token)
-    
-    if (!decoded || !decoded.id) {
-      return null
-    }
-    
-    // Get the user from the database
-    const user = await db.getUserById(decoded.id)
-    return user
-  } catch (error) {
-    console.error("Error getting user from token:", error)
-    return null
+export async function getAuthToken(request: NextRequest): Promise<string | null> {
+  // Try to get from cookie
+  const cookieStore = cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (token) {
+    return token;
   }
+
+  // Try to get from Authorization header
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authHeader.substring(7);
+  }
+
+  return null;
 }
 
-/**
- * Require authentication middleware
- */
-export async function requireAuth(
+export async function clearAuthCookie() {
+  const cookieStore = cookies();
+  cookieStore.delete(COOKIE_NAME);
+}
+
+// Authentication middleware
+export async function authenticateRequest(
   request: NextRequest
-): Promise<{ authenticated: boolean; user: schema.User | null }> {
-  try {
-    // Get the token from cookie
-    const token = await getAuthCookie()
-    
-    if (!token) {
-      return { authenticated: false, user: null }
-    }
-    
-    // Verify and decode the token
-    const decoded = await verifyToken(token)
-    
-    if (!decoded || !decoded.id) {
-      return { authenticated: false, user: null }
-    }
-    
-    // Get the user from the database
-    const user = await db.getUserById(decoded.id)
-    
-    if (!user) {
-      return { authenticated: false, user: null }
-    }
-    
-    return { authenticated: true, user }
-  } catch (error) {
-    console.error("Error in requireAuth:", error)
-    return { authenticated: false, user: null }
+): Promise<User | null> {
+  const token = await getAuthToken(request);
+  if (!token) {
+    return null;
   }
+
+  return await getUserFromToken(token);
+}
+
+// Function to get the current authenticated user
+export async function getCurrentUser(): Promise<User | null> {
+  const cookieStore = cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!token) {
+    return null;
+  }
+
+  return await getUserFromToken(token);
 }
