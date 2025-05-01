@@ -1,141 +1,102 @@
 'use client'
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { ReactNode, useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { QueryClientProvider as TanstackQueryProvider } from '@tanstack/react-query'
 
-// Error response types
-type ErrorResponse = {
-  message: string
-  error?: string
-  statusCode?: number
-}
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
 
-// Configuration for API requests
-interface RequestConfig extends RequestInit {
-  /** Set to true to avoid redirecting to login page on 401 */
+type ApiRequestOptions = {
   skipAuthRedirect?: boolean
+  headers?: Record<string, string>
 }
 
-// HTTP request methods
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-// Default fetch options
-const defaultFetchOptions: RequestInit = {
-  credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-}
-
-/**
- * Handles API request errors uniformly
- */
-async function handleApiError(response: Response): Promise<ErrorResponse> {
-  // Try to parse response as JSON
-  try {
-    const data = await response.json()
-    return {
-      message: data.message || `Error: ${response.status} ${response.statusText}`,
-      error: data.error,
-      statusCode: response.status,
-    }
-  } catch (e) {
-    // If response can't be parsed as JSON
-    return {
-      message: `Error: ${response.status} ${response.statusText}`,
-      statusCode: response.status,
-    }
-  }
-}
-
-/**
- * Make an API request with proper error handling
- */
-export async function apiRequest<T = any>(
-  method: HttpMethod,
-  url: string,
-  body?: any,
-  config: RequestConfig = {}
-): Promise<Response> {
-  const options: RequestInit = {
-    ...defaultFetchOptions,
-    ...config,
-    method,
-  }
-
-  // Add body if present
-  if (body && method !== 'GET') {
-    options.body = JSON.stringify(body)
-  }
-
-  const response = await fetch(url, options)
-
-  // Handle non-success responses
-  if (!response.ok) {
-    const errorData = await handleApiError(response)
-    
-    // Handle unauthorized errors
-    if (response.status === 401 && !config.skipAuthRedirect) {
-      // Redirect to login when unauthorized
-      window.location.href = '/auth'
-    }
-
-    throw new Error(errorData.message)
-  }
-
-  return response
-}
-
-/**
- * React Query fetcher function that works with our API structure
- */
-export function getQueryFn<T>(options: { on401?: 'redirect' | 'returnNull' } = {}) {
-  return async ({ queryKey }: { queryKey: (string | number | object)[] }): Promise<T | undefined> => {
-    const url = queryKey[0] as string
-    
-    try {
-      const response = await apiRequest('GET', url, undefined, {
-        skipAuthRedirect: options.on401 === 'returnNull',
-      })
-      
-      // Return null when the response is 204 No Content
-      if (response.status === 204) {
-        return undefined
-      }
-      
-      return await response.json()
-    } catch (error) {
-      if (error instanceof Error && options.on401 === 'returnNull') {
-        return undefined
-      }
-      throw error
-    }
-  }
-}
-
-// Export a singleton QueryClient instance
+// Create a client
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 60 * 1000, // 1 minute
       retry: 1,
       refetchOnWindowFocus: false,
-      queryFn: getQueryFn(),
     },
   },
 })
 
-export function QueryClientWrapper({ children }: { children: ReactNode }) {
-  // Create new client for each session to avoid hydration issues
-  const [client] = useState(() => queryClient)
+/**
+ * Make an API request with proper error handling and authentication support
+ */
+export async function apiRequest(
+  method: HttpMethod,
+  endpoint: string,
+  data?: any,
+  options: ApiRequestOptions = {}
+): Promise<Response> {
+  const url = endpoint.startsWith('/') 
+    ? `${process.env.NEXT_PUBLIC_API_URL || ''}${endpoint}`
+    : endpoint
+  
+  const { skipAuthRedirect = false, headers = {} } = options
+  
+  const requestOptions: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    credentials: 'include', // Always include cookies for auth
+  }
+  
+  // Add body for non-GET requests
+  if (method !== 'GET' && data) {
+    requestOptions.body = JSON.stringify(data)
+  }
+  
+  try {
+    const response = await fetch(url, requestOptions)
+    
+    // Handle auth errors (redirect to login)
+    if (response.status === 401 && !skipAuthRedirect) {
+      window.location.href = '/auth'
+      throw new Error('Authentication required')
+    }
+    
+    // Handle other error responses
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(
+        errorData.message || errorData.error || `Request failed with status ${response.status}`
+      )
+    }
+    
+    return response
+  } catch (error) {
+    console.error(`API request failed: ${method} ${url}`, error)
+    throw error
+  }
+}
 
+/**
+ * Generate a QueryFn for TanStack Query with proper typing
+ */
+export function getQueryFn<T>(options: ApiRequestOptions = {}) {
+  return async ({ queryKey }: { queryKey: string[] }): Promise<T> => {
+    const [endpoint] = queryKey
+    const response = await apiRequest('GET', endpoint, undefined, options)
+    return await response.json()
+  }
+}
+
+/**
+ * React Query Provider with Dev Tools enabled in development
+ */
+export function QueryClientProvider({ children }: { children: ReactNode }) {
+  const [client] = useState(() => queryClient)
+  
   return (
-    <QueryClientProvider client={client}>
+    <TanstackQueryProvider client={client}>
       {children}
-      {process.env.NODE_ENV !== 'production' && (
-        <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
-      )}
-    </QueryClientProvider>
+      {process.env.NODE_ENV === 'development' && <ReactQueryDevtools />}
+    </TanstackQueryProvider>
   )
 }

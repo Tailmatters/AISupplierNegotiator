@@ -1,131 +1,170 @@
-import { scrypt, randomBytes, timingSafeEqual } from 'crypto'
-import { promisify } from 'util'
-import { NextResponse } from 'next/server'
-import { jwtVerify, SignJWT } from 'jose'
+import { compare, hash } from 'bcrypt'
+import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
-import { db } from '@/lib/db'
-import { users } from '@/schema'
+import { NextRequest, NextResponse } from 'next/server'
+import { redirect } from 'next/navigation'
+import * as schema from '@/schema'
+import { db, withErrorHandling } from './db'
 import { eq } from 'drizzle-orm'
-import { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies'
 
-// Convert scrypt to promise-based function
-const scryptAsync = promisify(scrypt)
-
-// JWT secret key (use a proper env variable in production)
-export const JWT_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || 'procurement-ai-platform-secret-key'
+// Configuration settings
+const SALT_ROUNDS = 10
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.SESSION_SECRET || 'your-secret-key-should-be-at-least-32-chars'
 )
+const JWT_EXPIRES_IN = '7d'
 
-// Authentication token cookie name
+// Define the session token cookie name
 export const AUTH_COOKIE = 'auth-token'
 
-// Token expiration in seconds (1 day)
-export const TOKEN_EXPIRATION = 60 * 60 * 24
-
-// Define JWT payload type
-export interface JWTPayload {
-  userId: number
-  username: string
-  role: string
-}
-
-// Hash a password
+/**
+ * Hash a password using bcrypt
+ */
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString('hex')
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer
-  return `${buf.toString('hex')}.${salt}`
+  return await hash(password, SALT_ROUNDS)
 }
 
-// Compare a password with a hashed password
+/**
+ * Compare a plain text password with a hashed password
+ */
 export async function comparePasswords(
-  suppliedPassword: string,
-  storedPassword: string
+  plainPassword: string,
+  hashedPassword: string
 ): Promise<boolean> {
-  const [hashedPassword, salt] = storedPassword.split('.')
-  const hashedPasswordBuf = Buffer.from(hashedPassword, 'hex')
-  const suppliedPasswordBuf = (await scryptAsync(
-    suppliedPassword,
-    salt,
-    64
-  )) as Buffer
-  return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf)
+  return await compare(plainPassword, hashedPassword)
 }
 
-// Create a JWT token
-export async function createToken(payload: JWTPayload): Promise<string> {
-  const token = await new SignJWT(payload)
+/**
+ * Create a JWT token for user authentication
+ */
+export async function signToken(payload: { id: number; username: string }): Promise<string> {
+  const token = await new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(`${TOKEN_EXPIRATION}s`)
+    .setExpirationTime(JWT_EXPIRES_IN)
     .sign(JWT_SECRET)
   
   return token
 }
 
-// Set token in cookie
-export async function setTokenCookie(
-  response: NextResponse,
-  token: string
-): Promise<void> {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: TOKEN_EXPIRATION,
-    path: '/',
-    sameSite: 'lax' as const,
-  }
-  
-  response.cookies.set(AUTH_COOKIE, token, cookieOptions)
-}
-
-// Remove token cookie
-export async function removeTokenCookie(
-  response: NextResponse
-): Promise<void> {
-  response.cookies.delete(AUTH_COOKIE)
-}
-
-// Get auth token from cookies
-export async function getAuthToken(
-  cookies: ReadonlyRequestCookies
-): Promise<string | undefined> {
-  const cookie = cookies.get(AUTH_COOKIE)
-  return cookie?.value
-}
-
-// Verify a JWT token
-export async function verifyToken(
-  token: string
-): Promise<JWTPayload | null> {
+/**
+ * Verify and decode a JWT token
+ */
+export async function verifyToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET)
-    return payload as JWTPayload
+    return payload
   } catch (error) {
-    console.error('Token verification error:', error)
+    console.error('Token verification failed:', error)
     return null
   }
 }
 
-// Get the current user from the request
-export async function getCurrentUser(userId: number) {
+/**
+ * Set the authentication token in cookies
+ */
+export async function setAuthCookie(response: NextResponse, token: string): Promise<NextResponse> {
+  response.cookies.set({
+    name: AUTH_COOKIE,
+    value: token,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+    sameSite: 'lax',
+  })
+  
+  return response
+}
+
+/**
+ * Clear the authentication token from cookies
+ */
+export function clearAuthCookie(response: NextResponse): NextResponse {
+  response.cookies.set({
+    name: AUTH_COOKIE,
+    value: '',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  })
+  
+  return response
+}
+
+/**
+ * Get the current authenticated user from the request
+ */
+export async function getAuthUser(request: NextRequest) {
   try {
-    const [user] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        company: users.company,
-        position: users.position,
-        avatarUrl: users.avatarUrl,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
+    const token = request.cookies.get(AUTH_COOKIE)?.value
     
-    return user || null
+    if (!token) {
+      return null
+    }
+    
+    const payload = await verifyToken(token)
+    
+    if (!payload || !payload.id) {
+      return null
+    }
+    
+    const user = await withErrorHandling(
+      async () => {
+        const [user] = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, Number(payload.id)))
+        
+        return user
+      },
+      'Failed to fetch authenticated user'
+    )
+    
+    if (!user) {
+      return null
+    }
+    
+    return user
   } catch (error) {
-    console.error('Get current user error:', error)
+    console.error('Authentication error:', error)
     return null
   }
+}
+
+/**
+ * Require authentication or redirect to the auth page
+ */
+export async function requireAuth() {
+  const cookieStore = cookies()
+  const token = cookieStore.get(AUTH_COOKIE)?.value
+  
+  if (!token) {
+    redirect('/auth')
+  }
+  
+  const payload = await verifyToken(token)
+  
+  if (!payload || !payload.id) {
+    redirect('/auth')
+  }
+  
+  const user = await withErrorHandling(
+    async () => {
+      const [user] = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, Number(payload.id)))
+      
+      return user
+    },
+    'Failed to fetch authenticated user'
+  )
+  
+  if (!user) {
+    redirect('/auth')
+  }
+  
+  return user
 }

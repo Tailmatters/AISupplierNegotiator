@@ -1,42 +1,45 @@
 import { Pool, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-serverless'
-import * as schema from '@/schema'
 import ws from 'ws'
+import * as schema from '@/schema'
 
-// Configure Neon to use WebSockets
+// This is needed for Neon serverless driver
 neonConfig.webSocketConstructor = ws
 
-// Check for the DATABASE_URL environment variable
+// Ensure database URL is available
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    'DATABASE_URL environment variable is not set. Please set it in your .env file or environment variables.'
-  )
+  throw new Error('DATABASE_URL is not set. Database connections will fail.')
 }
 
 // Create a connection pool
-export const pool = new Pool({
+export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
-  // Set max connection pool size with sensible defaults
-  max: process.env.NODE_ENV === 'production' ? 10 : 5,
+  // Configure connection pool for serverless environment
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 })
 
 // Initialize Drizzle ORM with our schema
 export const db = drizzle(pool, { schema })
 
-// Utility function to get a direct client for transactions
-export async function getClient() {
-  return await pool.connect()
+// Helper function to handle database errors with proper logging
+export async function withErrorHandling<T>(
+  operation: () => Promise<T>,
+  errorMessage = 'Database operation failed'
+): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    console.error(`${errorMessage}:`, error)
+    throw new Error(`${errorMessage}: ${error.message || 'Unknown error'}`)
+  }
 }
 
-// Function to test the database connection
-export async function testConnection() {
-  try {
-    const client = await pool.connect()
-    await client.query('SELECT 1')
-    client.release()
-    return true
-  } catch (error) {
-    console.error('Database connection test failed:', error)
-    return false
-  }
+// Generic query function with error handling
+export async function query<T>(
+  queryFn: () => Promise<T>,
+  errorMessage?: string
+): Promise<T> {
+  return withErrorHandling(queryFn, errorMessage)
 }
