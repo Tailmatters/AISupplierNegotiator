@@ -28,12 +28,28 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+// Create a memory store as fallback for when the database is unavailable
+import createMemoryStore from "memorystore";
+const MemoryStore = createMemoryStore(session);
+const memorySessionStore = new MemoryStore({
+  checkPeriod: 86400000, // 24 hours - prune expired entries every day
+});
+
 export function setupAuth(app: Express) {
+  // Use memory session store if database is not available
+  let sessionStore;
+  try {
+    sessionStore = storage.sessionStore;
+  } catch (error) {
+    console.warn("Failed to initialize database session store, using memory store instead");
+    sessionStore = memorySessionStore;
+  }
+  
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "ai-negotiator-secret",
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
+    store: sessionStore, 
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
       secure: process.env.NODE_ENV === "production",

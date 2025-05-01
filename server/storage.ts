@@ -20,6 +20,17 @@ const MemoryStore = createMemoryStore(session);
 const PostgresSessionStore = connectPg(session);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+// Define missing types for TypeScript
+type Invitation = any;
+type InsertInvitation = any;
+type Proposal = any;
+type InsertProposal = any;
+type ApiConnection = any;
+type InsertApiConnection = any;
+type WidgetType = any;
+type Dashboard = any;
+type InsertDashboard = any;
+
 // Storage interface for all CRUD operations
 export interface IStorage {
   // User operations
