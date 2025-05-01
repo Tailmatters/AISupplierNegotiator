@@ -1,61 +1,51 @@
 import { NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
-import bcrypt from "bcryptjs"
-import { getUserByEmail } from "@/lib/db"
-import { AUTH_ERRORS, authenticateUser, createToken } from "@/lib/auth"
+import { cookies } from "next/headers"
+import { authenticateUser, createToken } from "@/lib/auth"
 import { loginSchema } from "@/schema"
+import { z } from "zod"
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse and validate request body
+    // Parse request body
     const body = await request.json()
     
-    // Validate input with zod
-    const validatedData = loginSchema.safeParse(body)
+    // Validate request body
+    const validatedData = loginSchema.parse(body)
     
-    if (!validatedData.success) {
+    // Authenticate user
+    const user = await authenticateUser(validatedData.email, validatedData.password)
+    
+    // Create token
+    const token = await createToken(user)
+    
+    // Set token as cookie
+    cookies().set({
+      name: "token",
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    })
+    
+    // Return user data without password
+    const { password, ...userWithoutPassword } = user
+    
+    return NextResponse.json(userWithoutPassword, { status: 200 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: validatedData.error.errors[0].message },
+        { error: "Invalid login data", details: error.format() },
         { status: 400 }
       )
     }
     
-    const { email, password } = validatedData.data
+    console.error("Login error:", error)
     
-    try {
-      // Authenticate user
-      const user = await authenticateUser(email, password)
-      
-      // Generate JWT token
-      const token = await createToken(user)
-      
-      // Create response with user data (excluding password)
-      const { password: _, ...userWithoutPassword } = user
-      
-      // Set cookie with the JWT token
-      const response = NextResponse.json(userWithoutPassword)
-      
-      response.cookies.set({
-        name: "token",
-        value: token,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      })
-      
-      return response
-    } catch (error: any) {
-      return NextResponse.json(
-        { error: error.message || AUTH_ERRORS.INVALID_CREDENTIALS },
-        { status: 401 }
-      )
-    }
-  } catch (error: any) {
     return NextResponse.json(
-      { error: "Server error: " + error.message },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "Authentication failed" },
+      { status: 401 }
     )
   }
 }

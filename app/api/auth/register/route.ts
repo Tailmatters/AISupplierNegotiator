@@ -1,64 +1,42 @@
 import { NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
+import { cookies } from "next/headers"
 import { createUser, getUserByEmail } from "@/lib/db"
 import { hashPassword, createToken } from "@/lib/auth"
 import { insertUserSchema } from "@/schema"
-
-// Extended schema for registration with validation
-const registerSchema = insertUserSchema.extend({
-  email: z.string().email("Please enter a valid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(100, "Password is too long"),
-})
+import { z } from "zod"
 
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body = await request.json()
     
-    // Validate input with zod
-    const validatedData = registerSchema.safeParse(body)
+    // Validate request body
+    const validatedData = insertUserSchema.parse(body)
     
-    if (!validatedData.success) {
+    // Check if user with the same email already exists
+    const existingUser = await getUserByEmail(validatedData.email)
+    
+    if (existingUser) {
       return NextResponse.json(
-        { error: validatedData.error.errors[0].message },
+        { error: "Email already in use" },
         { status: 400 }
       )
     }
     
-    const userData = validatedData.data
+    // Hash password
+    const hashedPassword = await hashPassword(validatedData.password)
     
-    // Check if email is already in use
-    const existingUser = await getUserByEmail(userData.email)
-    
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Email is already in use" },
-        { status: 409 }
-      )
-    }
-    
-    // Hash the password
-    const hashedPassword = await hashPassword(userData.password)
-    
-    // Create new user with hashed password
+    // Create user with hashed password
     const newUser = await createUser({
-      ...userData,
+      ...validatedData,
       password: hashedPassword,
     })
     
-    // Generate JWT token
+    // Create token
     const token = await createToken(newUser)
     
-    // Return user data without password
-    const { password: _, ...userWithoutPassword } = newUser
-    
-    // Set cookie with the JWT token
-    const response = NextResponse.json(userWithoutPassword, { status: 201 })
-    
-    response.cookies.set({
+    // Set token as cookie
+    cookies().set({
       name: "token",
       value: token,
       httpOnly: true,
@@ -68,13 +46,23 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7, // 7 days
     })
     
-    return response
-  } catch (error: any) {
+    // Return user data without password
+    const { password, ...userWithoutPassword } = newUser
+    
+    return NextResponse.json(userWithoutPassword, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Invalid registration data", details: error.format() },
+        { status: 400 }
+      )
+    }
+    
     console.error("Registration error:", error)
     
     return NextResponse.json(
-      { error: "Failed to create user: " + error.message },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "Registration failed" },
+      { status: 400 }
     )
   }
 }

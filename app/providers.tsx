@@ -1,12 +1,13 @@
 "use client"
 
-import { ReactNode } from "react"
+import React, { ReactNode } from "react"
 
-// Application providers
+// Import providers
 import { ReactQueryProvider } from "@/lib/query-client"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 
+// Providers props interface
 interface ProvidersProps {
   children: ReactNode
 }
@@ -18,13 +19,10 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ReactQueryProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <AuthProvider>{children}</AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </ThemeProvider>
     </ReactQueryProvider>
   )

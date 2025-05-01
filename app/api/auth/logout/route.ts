@@ -1,23 +1,17 @@
-import { NextRequest, NextResponse } from "next/server"
-import { AUTH_ERRORS } from "@/lib/auth"
+import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    // Create response
-    const response = NextResponse.json({ success: true })
+    // Delete token cookie
+    cookies().delete("token")
     
-    // Clear the auth token cookie
-    response.cookies.set({
-      name: "token",
-      value: "",
-      expires: new Date(0),
-      path: "/",
-    })
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (error) {
+    console.error("Logout error:", error)
     
-    return response
-  } catch (error: any) {
     return NextResponse.json(
-      { error: "Logout failed: " + error.message },
+      { error: "Failed to logout" },
       { status: 500 }
     )
   }
