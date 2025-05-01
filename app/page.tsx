@@ -1,249 +1,188 @@
-'use client'
+"use client";
 
-import { Button } from '@/components/ui/button'
-import { ChevronRight, BarChart3, FileText, Clock, Zap } from 'lucide-react'
-import Link from 'next/link'
-import Image from 'next/image'
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuth } from "@/hooks/use-auth";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function HomePage() {
+  const router = useRouter();
+  const { user, isLoading, logoutMutation } = useAuth();
+
+  // If still loading, show loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // This should not happen due to middleware redirecting, but just in case
+  if (!user) {
+    router.push("/auth");
+    return null;
+  }
+
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10">
+      <header className="sticky top-0 z-40 border-b bg-background">
         <div className="container flex h-16 items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
-              P
-            </div>
-            <span className="font-bold text-lg">ProcureAI</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-6 w-6"
+            >
+              <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
+            </svg>
+            <span className="font-bold">AI Negotiator Pro</span>
           </div>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/features" className="text-muted-foreground hover:text-foreground transition-colors">
-              Features
-            </Link>
-            <Link href="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">
-              Pricing
-            </Link>
-            <Link href="/about" className="text-muted-foreground hover:text-foreground transition-colors">
-              About
-            </Link>
-          </nav>
           <div className="flex items-center gap-4">
-            <Link href="/auth">
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/auth">
-              <Button size="sm">
-                Get Started
-              </Button>
-            </Link>
+            <div className="text-sm text-muted-foreground">
+              Welcome, {user.name}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+            >
+              {logoutMutation.isPending ? "Signing out..." : "Sign out"}
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="py-20 md:py-28 container">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
-            AI-Powered Procurement Negotiations
-          </h1>
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Optimize supplier relationships and drive savings with intelligent contract management, 
-            advanced analytics, and AI-driven negotiations.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/auth">
-              <Button size="lg" className="gap-2">
-                Start Negotiating <ChevronRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href="/demo">
-              <Button size="lg" variant="outline">
-                See a Demo
-              </Button>
-            </Link>
-          </div>
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-card border rounded-lg p-6 text-left">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <BarChart3 className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Spend Analysis</h3>
-              <p className="text-muted-foreground">
-                Discover savings opportunities with AI-powered spend analysis and category intelligence.
-              </p>
-            </div>
-            <div className="bg-card border rounded-lg p-6 text-left">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <Zap className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">AI Negotiation</h3>
-              <p className="text-muted-foreground">
-                Let AI negotiate on your behalf, following your strategy and objectives with suppliers.
-              </p>
-            </div>
-            <div className="bg-card border rounded-lg p-6 text-left">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <FileText className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Contract Management</h3>
-              <p className="text-muted-foreground">
-                Generate and manage contracts with templates, automated workflows, and approval tracking.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Main content */}
+      <main className="flex-1">
+        <div className="container py-4 md:py-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Dashboard card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Dashboard</CardTitle>
+                <CardDescription>View your personalized dashboard</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Get a comprehensive overview of your procurement activities, supplier performance and KPIs.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">View Dashboard</Button>
+              </CardFooter>
+            </Card>
 
-      {/* Features Section */}
-      <section className="bg-muted/50 py-20">
-        <div className="container">
-          <h2 className="text-3xl font-bold text-center mb-12">Designed for Procurement Professionals</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-            <div>
-              <h3 className="text-2xl font-semibold mb-4">Transform Supplier Relationships</h3>
-              <ul className="space-y-4">
-                <li className="flex gap-3">
-                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    ✓
-                  </div>
-                  <p>Automatically analyze past negotiation data by category</p>
-                </li>
-                <li className="flex gap-3">
-                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    ✓
-                  </div>
-                  <p>Set negotiation goals and let AI handle supplier interactions</p>
-                </li>
-                <li className="flex gap-3">
-                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    ✓
-                  </div>
-                  <p>Generate contracts from finalized negotiations using templates</p>
-                </li>
-                <li className="flex gap-3">
-                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    ✓
-                  </div>
-                  <p>Gain insights with Porter's Five Forces analysis for each category</p>
-                </li>
-              </ul>
-              <div className="mt-8">
-                <Link href="/features">
-                  <Button variant="outline" className="gap-2">
-                    Learn More <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-              <div className="p-6 border-b">
-                <h4 className="font-semibold flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-primary" />
-                  Sample Negotiation Timeline
-                </h4>
-              </div>
-              <div className="p-6 space-y-6">
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">1</div>
-                    <div className="w-0.5 h-full bg-border mt-2"></div>
-                  </div>
-                  <div>
-                    <h5 className="font-medium">Define Objectives</h5>
-                    <p className="text-muted-foreground text-sm">Set target prices, terms, and acceptable thresholds</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">2</div>
-                    <div className="w-0.5 h-full bg-border mt-2"></div>
-                  </div>
-                  <div>
-                    <h5 className="font-medium">Invite Suppliers</h5>
-                    <p className="text-muted-foreground text-sm">Suppliers receive an email link to begin negotiations</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">3</div>
-                    <div className="w-0.5 h-full bg-border mt-2"></div>
-                  </div>
-                  <div>
-                    <h5 className="font-medium">AI Negotiation</h5>
-                    <p className="text-muted-foreground text-sm">AI conducts iterative negotiations based on your strategy</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">4</div>
-                  </div>
-                  <div>
-                    <h5 className="font-medium">Contract Generation</h5>
-                    <p className="text-muted-foreground text-sm">Final terms auto-populated into your contract template</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Negotiations card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Negotiations</CardTitle>
+                <CardDescription>Manage your active negotiations</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Monitor ongoing negotiations, start new ones, and review negotiation history with AI assistance.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">View Negotiations</Button>
+              </CardFooter>
+            </Card>
+
+            {/* Suppliers card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Suppliers</CardTitle>
+                <CardDescription>Manage your supplier database</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Add new suppliers, view performance metrics, and manage supplier relationships.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">View Suppliers</Button>
+              </CardFooter>
+            </Card>
+
+            {/* Contracts card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Contracts</CardTitle>
+                <CardDescription>Manage your contracts</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Create, review, and manage contract templates and active contracts with suppliers.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">View Contracts</Button>
+              </CardFooter>
+            </Card>
+
+            {/* Spend Analysis card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Spend Analysis</CardTitle>
+                <CardDescription>Analyze your procurement spend</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Upload and analyze spend data to identify savings opportunities and optimization areas.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">View Spend Analysis</Button>
+              </CardFooter>
+            </Card>
+
+            {/* Market Analysis card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Market Analysis</CardTitle>
+                <CardDescription>Explore market insights</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Get Porter's Five Forces analysis and market intelligence for your procurement categories.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full">View Market Analysis</Button>
+              </CardFooter>
+            </Card>
           </div>
         </div>
-      </section>
+      </main>
 
       {/* Footer */}
-      <footer className="border-t mt-auto">
-        <div className="container py-8 md:py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div>
-              <h3 className="font-semibold mb-4">Product</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/features" className="hover:text-foreground transition-colors">Features</Link></li>
-                <li><Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link></li>
-                <li><Link href="/integrations" className="hover:text-foreground transition-colors">Integrations</Link></li>
-                <li><Link href="/changelog" className="hover:text-foreground transition-colors">Changelog</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/blog" className="hover:text-foreground transition-colors">Blog</Link></li>
-                <li><Link href="/documentation" className="hover:text-foreground transition-colors">Documentation</Link></li>
-                <li><Link href="/guides" className="hover:text-foreground transition-colors">Guides</Link></li>
-                <li><Link href="/webinars" className="hover:text-foreground transition-colors">Webinars</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Company</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/about" className="hover:text-foreground transition-colors">About</Link></li>
-                <li><Link href="/customers" className="hover:text-foreground transition-colors">Customers</Link></li>
-                <li><Link href="/careers" className="hover:text-foreground transition-colors">Careers</Link></li>
-                <li><Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link></li>
-                <li><Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link></li>
-                <li><Link href="/security" className="hover:text-foreground transition-colors">Security</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-12 pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
-                P
-              </div>
-              <span className="font-bold text-lg">ProcureAI</span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ProcureAI, Inc. All rights reserved.
-            </p>
+      <footer className="border-t bg-muted py-4">
+        <div className="container flex flex-col gap-2 md:flex-row md:gap-4">
+          <p className="text-center text-sm text-muted-foreground md:text-left">
+            &copy; {new Date().getFullYear()} AI Negotiator Pro. All rights reserved.
+          </p>
+          <div className="md:ml-auto flex justify-center gap-4 md:justify-end">
+            <Button variant="link" size="sm" className="text-muted-foreground">
+              Terms
+            </Button>
+            <Button variant="link" size="sm" className="text-muted-foreground">
+              Privacy
+            </Button>
+            <Button variant="link" size="sm" className="text-muted-foreground">
+              Contact
+            </Button>
           </div>
         </div>
       </footer>
     </div>
-  )
+  );
 }

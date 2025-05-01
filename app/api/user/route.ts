@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 
+/**
+ * GET /api/user
+ * Returns the current user's data
+ */
 export async function GET(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
@@ -12,17 +16,13 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    return NextResponse.json({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
+    // Return user data without the password
+    const { password, ...userData } = user;
+    return NextResponse.json(userData);
   } catch (error) {
     console.error("Error fetching user:", error);
     return NextResponse.json(
-      { error: "Failed to fetch user" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

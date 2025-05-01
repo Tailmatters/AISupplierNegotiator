@@ -1,142 +1,157 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import { useRouter } from 'next/navigation'
-import Image from 'next/image'
-import Link from 'next/link'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
-import { z } from 'zod'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import Image from "next/image";
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form'
-import { useAuth } from '@/hooks/use-auth'
-import { insertUserSchema } from '@/schema'
-
-// Form schema for login
-const loginSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
-})
-
-// Form schema for registration with additional validation
-const registerSchema = insertUserSchema
-  .pick({
-    username: true,
-    password: true,
-    name: true,
-    email: true,
-    company: true,
-  })
-  .extend({
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string(),
-  })
-  .refine(data => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ['confirmPassword'],
-  })
-
-type LoginFormValues = z.infer<typeof loginSchema>
-type RegisterFormValues = z.infer<typeof registerSchema>
+  useForm,
+} from "@/components/ui/form";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
+import { insertUserSchema, loginSchema } from "@/schema";
 
 export default function AuthPage() {
-  const { user, loginMutation, registerMutation } = useAuth()
-  const router = useRouter()
-  const [activeTab, setActiveTab] = React.useState('login')
-
-  // Redirect if already logged in
-  React.useEffect(() => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const [activeTab, setActiveTab] = useState("login");
+  
+  const { user, isLoading, loginMutation, registerMutation } = useAuth();
+  
+  // Redirect if user is already logged in
+  useEffect(() => {
     if (user) {
-      router.push('/dashboard')
+      router.push(callbackUrl);
     }
-  }, [user, router])
-
+  }, [user, router, callbackUrl]);
+  
   // Login form
-  const loginForm = useForm<LoginFormValues>({
+  const loginForm = useForm({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: '',
-      password: '',
+      username: "",
+      password: "",
     },
-  })
-
-  // Register form
-  const registerForm = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
+  });
+  
+  // Registration form
+  const registerForm = useForm({
+    resolver: zodResolver(
+      insertUserSchema.extend({
+        confirmPassword: z.string(),
+      }).refine((data) => data.password === data.confirmPassword, {
+        message: "Passwords do not match",
+        path: ["confirmPassword"],
+      })
+    ),
     defaultValues: {
-      username: '',
-      password: '',
-      confirmPassword: '',
-      name: '',
-      email: '',
-      company: '',
+      username: "",
+      email: "",
+      name: "",
+      password: "",
+      confirmPassword: "",
+      role: "procurement",
+      company: "",
     },
-  })
-
-  // Handle login form submission
-  function onLoginSubmit(values: LoginFormValues) {
-    loginMutation.mutate(values)
+  });
+  
+  // Login form submit handler
+  function onLoginSubmit(values: z.infer<typeof loginSchema>) {
+    loginMutation.mutate(values);
   }
-
-  // Handle register form submission
-  function onRegisterSubmit(values: RegisterFormValues) {
-    registerMutation.mutate(values)
+  
+  // Registration form submit handler
+  function onRegisterSubmit(values: z.infer<typeof insertUserSchema> & { confirmPassword: string }) {
+    const { confirmPassword, ...registerData } = values;
+    registerMutation.mutate(registerData);
   }
-
+  
+  // If still loading, show loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+  
   return (
-    <div className="container flex h-screen w-screen flex-col items-center justify-center">
-      <div className="mx-auto grid w-full max-w-[1200px] gap-6 md:grid-cols-2 lg:gap-12">
-        {/* Left side: Auth form */}
-        <div className="flex flex-col justify-center space-y-6">
-          <div className="space-y-2 text-center md:text-left">
-            <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-              AI Procurement Negotiator
+    <div className="container relative h-screen flex-col items-center justify-center md:grid lg:max-w-none lg:grid-cols-2 lg:px-0">
+      <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary to-secondary" />
+        
+        <div className="relative z-20 flex items-center text-lg font-medium">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mr-2 h-6 w-6"
+          >
+            <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
+          </svg>
+          AI Negotiator Pro
+        </div>
+        
+        <div className="relative z-20 mt-auto">
+          <blockquote className="space-y-4">
+            <p className="text-lg">
+              Optimize your procurement negotiation process with our AI-powered platform. 
+              Leverage historical data, advanced analytics, and automated negotiation tools 
+              to secure better deals while saving time and resources.
+            </p>
+            <footer className="text-sm font-light">
+              Join hundreds of procurement teams already optimizing their supplier negotiations.
+            </footer>
+          </blockquote>
+        </div>
+      </div>
+      
+      <div className="p-4 sm:p-8 lg:p-8">
+        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          <div className="flex flex-col space-y-2 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Welcome to AI Negotiator
             </h1>
-            <p className="text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-              Sign in to access your AI-powered negotiation platform
+            <p className="text-sm text-muted-foreground">
+              Sign in to your account or create a new one to get started
             </p>
           </div>
-
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          
+          <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="register">Register</TabsTrigger>
             </TabsList>
             
-            {/* Login Form */}
             <TabsContent value="login">
               <Card>
                 <CardHeader>
-                  <CardTitle>Account Login</CardTitle>
+                  <CardTitle>Login</CardTitle>
                   <CardDescription>
-                    Enter your credentials to access your account
+                    Enter your credentials to sign in to your account
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Form {...loginForm}>
-                    <form
-                      onSubmit={loginForm.handleSubmit(onLoginSubmit)}
-                      className="space-y-4"
-                    >
+                    <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                       <FormField
                         control={loginForm.control}
                         name="username"
@@ -150,6 +165,7 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+                      
                       <FormField
                         control={loginForm.control}
                         name="password"
@@ -157,55 +173,42 @@ export default function AuthPage() {
                           <FormItem>
                             <FormLabel>Password</FormLabel>
                             <FormControl>
-                              <Input
-                                type="password"
-                                placeholder="Enter your password"
-                                {...field}
-                              />
+                              <Input type="password" placeholder="••••••••" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      <Button
-                        type="submit"
-                        className="w-full"
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full" 
                         disabled={loginMutation.isPending}
                       >
-                        {loginMutation.isPending ? 'Signing In...' : 'Sign In'}
+                        {loginMutation.isPending ? "Signing in..." : "Sign In"}
                       </Button>
                     </form>
                   </Form>
                 </CardContent>
-                <CardFooter className="flex flex-col items-center justify-center space-y-2">
-                  <div className="text-sm text-muted-foreground">
-                    Don&apos;t have an account?{' '}
-                    <button
-                      className="text-primary underline"
-                      onClick={() => setActiveTab('register')}
-                    >
-                      Register
-                    </button>
-                  </div>
+                <CardFooter className="flex justify-center">
+                  <Button variant="link" onClick={() => setActiveTab("register")}>
+                    Don't have an account? Sign up
+                  </Button>
                 </CardFooter>
               </Card>
             </TabsContent>
             
-            {/* Register Form */}
             <TabsContent value="register">
               <Card>
                 <CardHeader>
-                  <CardTitle>Create Account</CardTitle>
+                  <CardTitle>Create an Account</CardTitle>
                   <CardDescription>
-                    Sign up for a new account to get started
+                    Enter your details to create a new account
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Form {...registerForm}>
-                    <form
-                      onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
-                      className="space-y-4"
-                    >
+                    <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
                       <FormField
                         control={registerForm.control}
                         name="username"
@@ -219,6 +222,7 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+                      
                       <FormField
                         control={registerForm.control}
                         name="name"
@@ -232,6 +236,7 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+                      
                       <FormField
                         control={registerForm.control}
                         name="email"
@@ -239,22 +244,19 @@ export default function AuthPage() {
                           <FormItem>
                             <FormLabel>Email</FormLabel>
                             <FormControl>
-                              <Input
-                                type="email"
-                                placeholder="Enter your email"
-                                {...field}
-                              />
+                              <Input type="email" placeholder="Enter your email" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+                      
                       <FormField
                         control={registerForm.control}
                         name="company"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Company</FormLabel>
+                            <FormLabel>Company (Optional)</FormLabel>
                             <FormControl>
                               <Input placeholder="Enter your company name" {...field} />
                             </FormControl>
@@ -262,6 +264,7 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+                      
                       <FormField
                         control={registerForm.control}
                         name="password"
@@ -269,16 +272,16 @@ export default function AuthPage() {
                           <FormItem>
                             <FormLabel>Password</FormLabel>
                             <FormControl>
-                              <Input
-                                type="password"
-                                placeholder="Create a password"
-                                {...field}
-                              />
+                              <Input type="password" placeholder="••••••••" {...field} />
                             </FormControl>
+                            <FormDescription>
+                              At least 8 characters
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+                      
                       <FormField
                         control={registerForm.control}
                         name="confirmPassword"
@@ -286,105 +289,33 @@ export default function AuthPage() {
                           <FormItem>
                             <FormLabel>Confirm Password</FormLabel>
                             <FormControl>
-                              <Input
-                                type="password"
-                                placeholder="Confirm your password"
-                                {...field}
-                              />
+                              <Input type="password" placeholder="••••••••" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      <Button
-                        type="submit"
-                        className="w-full"
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full" 
                         disabled={registerMutation.isPending}
                       >
-                        {registerMutation.isPending ? 'Creating Account...' : 'Create Account'}
+                        {registerMutation.isPending ? "Creating account..." : "Create Account"}
                       </Button>
                     </form>
                   </Form>
                 </CardContent>
-                <CardFooter className="flex flex-col items-center justify-center space-y-2">
-                  <div className="text-sm text-muted-foreground">
-                    Already have an account?{' '}
-                    <button
-                      className="text-primary underline"
-                      onClick={() => setActiveTab('login')}
-                    >
-                      Login
-                    </button>
-                  </div>
+                <CardFooter className="flex justify-center">
+                  <Button variant="link" onClick={() => setActiveTab("login")}>
+                    Already have an account? Sign in
+                  </Button>
                 </CardFooter>
               </Card>
             </TabsContent>
           </Tabs>
         </div>
-
-        {/* Right side: Hero/Features */}
-        <div className="hidden flex-col justify-center space-y-6 rounded-lg bg-muted p-10 md:flex">
-          <div className="space-y-2">
-            <h2 className="text-3xl font-bold tracking-tighter">
-              Transform Your Procurement Process
-            </h2>
-            <p className="text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-              Our AI-powered platform optimizes supplier negotiations, increases savings, and streamlines contract management.
-            </p>
-          </div>
-          <div className="grid gap-4 py-4">
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M11 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5.5"/><path d="M18 14v4h4"/><path d="M18 18a4 4 0 0 0 4-4"/><path d="m12 12 8 8"/></svg>
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-semibold">AI-Driven Negotiation</h3>
-                <p className="text-sm text-muted-foreground">
-                  Automate negotiations with suppliers based on past data and market trends.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-semibold">Spend Analysis</h3>
-                <p className="text-sm text-muted-foreground">
-                  Comprehensive analytics to identify cost savings and supplier consolidation opportunities.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-semibold">Contract Management</h3>
-                <p className="text-sm text-muted-foreground">
-                  Generate and manage contracts with automatic templating and approval workflows.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex -space-x-2">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-medium">JD</span>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-medium">TS</span>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-medium">RK</span>
-              </div>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Join over 10,000 procurement professionals
-            </div>
-          </div>
-        </div>
       </div>
     </div>
-  )
+  );
 }

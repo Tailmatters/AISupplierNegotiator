@@ -1,153 +1,172 @@
-import { type ClassValue, clsx } from "clsx";
+import { ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { formatDistanceToNow, format } from "date-fns";
 
 /**
- * Combines class names using clsx and tailwind-merge
+ * Combines multiple class names with tailwind merge
+ * @param inputs Class values to merge
+ * @returns Merged class string
  */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 /**
- * Formats a date as a string
- * @param date The date to format
- * @param options Intl.DateTimeFormatOptions to customize the formatting
- * @returns The formatted date string
+ * Formats a date as a relative time (e.g., "5 minutes ago")
+ * @param date Date to format
+ * @param options Formatting options
+ * @returns Formatted date string
  */
-export function formatDate(
+export function formatRelativeTime(
   date: Date | string | number,
-  options: Intl.DateTimeFormatOptions = {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }
+  options: { addSuffix?: boolean } = {}
 ): string {
-  return new Intl.DateTimeFormat("en-US", {
-    ...options,
-  }).format(new Date(date));
+  const { addSuffix = true } = options;
+  const dateObj = typeof date === "string" || typeof date === "number" 
+    ? new Date(date) 
+    : date;
+  
+  return formatDistanceToNow(dateObj, { addSuffix });
 }
 
 /**
- * Formats a currency value as a string
- * @param amount The amount to format
- * @param currency The currency code (e.g., "USD")
- * @returns The formatted currency string
+ * Formats a date to a standard format
+ * @param date Date to format
+ * @param formatStr Format string (defaults to "MMM d, yyyy")
+ * @returns Formatted date string
  */
-export function formatCurrency(amount: number, currency: string = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
+export function formatDate(
+  date: Date | string | number,
+  formatStr: string = "MMM d, yyyy"
+): string {
+  const dateObj = typeof date === "string" || typeof date === "number" 
+    ? new Date(date) 
+    : date;
+  
+  return format(dateObj, formatStr);
+}
+
+/**
+ * Formats a currency value
+ * @param amount Number to format
+ * @param currency Currency code (defaults to USD)
+ * @param locale Locale for formatting (defaults to en-US)
+ * @returns Formatted currency string
+ */
+export function formatCurrency(
+  amount: number,
+  currency: string = "USD",
+  locale: string = "en-US"
+): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
   }).format(amount);
 }
 
 /**
- * Formats a number as a percentage
- * @param value The decimal value to format as a percentage
- * @param decimalPlaces The number of decimal places to display
- * @returns The formatted percentage string
+ * Formats a percentage value
+ * @param value Number to format as percentage
+ * @param decimals Number of decimal places
+ * @returns Formatted percentage string
  */
-export function formatPercentage(value: number, decimalPlaces: number = 1): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "percent",
-    minimumFractionDigits: decimalPlaces,
-    maximumFractionDigits: decimalPlaces,
-  }).format(value);
+export function formatPercent(value: number, decimals: number = 1): string {
+  return `${(value * 100).toFixed(decimals)}%`;
 }
 
 /**
- * Truncates a string to a specified length and adds an ellipsis if needed
- * @param str The string to truncate
- * @param length The maximum length of the truncated string
- * @returns The truncated string
+ * Formats a number with thousand separators
+ * @param value Number to format
+ * @param locale Locale for formatting (defaults to en-US)
+ * @returns Formatted number string
  */
-export function truncateString(str: string, length: number = 50): string {
-  if (!str || str.length <= length) return str;
-  return `${str.substring(0, length).trim()}...`;
+export function formatNumber(
+  value: number,
+  locale: string = "en-US"
+): string {
+  return new Intl.NumberFormat(locale).format(value);
 }
 
 /**
- * Generates a random ID string
- * @returns A random ID string
+ * Truncates a string to a maximum length
+ * @param str String to truncate
+ * @param maxLength Maximum length
+ * @param ellipsis Ellipsis characters
+ * @returns Truncated string
  */
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 10);
+export function truncateString(
+  str: string,
+  maxLength: number = 50,
+  ellipsis: string = "..."
+): string {
+  if (!str || str.length <= maxLength) return str;
+  return `${str.slice(0, maxLength)}${ellipsis}`;
+}
+
+/**
+ * Generates a random ID
+ * @param length Length of the ID (default: 8)
+ * @returns Random ID string
+ */
+export function generateId(length: number = 8): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 /**
  * Debounces a function
- * @param fn The function to debounce
- * @param ms The debounce delay in milliseconds
- * @returns The debounced function
+ * @param fn Function to debounce
+ * @param ms Debounce delay in milliseconds
+ * @returns Debounced function
  */
 export function debounce<T extends (...args: any[]) => any>(
   fn: T,
   ms: number
 ): (...args: Parameters<T>) => void {
   let timeoutId: ReturnType<typeof setTimeout>;
-  return function (this: any, ...args: Parameters<T>) {
+  return function (...args: Parameters<T>) {
     clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn.apply(this, args), ms);
+    timeoutId = setTimeout(() => fn(...args), ms);
   };
 }
 
 /**
- * Deep clones an object
- * @param obj The object to clone
- * @returns A deep copy of the object
+ * Groups an array of objects by a key
+ * @param array Array to group
+ * @param key Key to group by
+ * @returns Grouped object
  */
-export function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj));
-}
-
-/**
- * Groups an array of objects by a specified key
- * @param array The array to group
- * @param key The key to group by
- * @returns An object with groups
- */
-export function groupBy<T extends Record<string, any>, K extends keyof T>(
+export function groupBy<T extends Record<string, any>>(
   array: T[],
-  key: K
+  key: keyof T
 ): Record<string, T[]> {
   return array.reduce((result, item) => {
     const groupKey = String(item[key]);
-    if (!result[groupKey]) {
-      result[groupKey] = [];
-    }
+    result[groupKey] = result[groupKey] || [];
     result[groupKey].push(item);
     return result;
   }, {} as Record<string, T[]>);
 }
 
 /**
- * Extracts specific properties from an object to create a new object
- * @param obj The source object
- * @param keys The keys to extract
- * @returns A new object with only the specified properties
+ * Calculates the sum of an array of numbers
+ * @param array Array of numbers
+ * @returns Sum of the array
  */
-export function pick<T extends object, K extends keyof T>(
-  obj: T,
-  keys: K[]
-): Pick<T, K> {
-  return keys.reduce((result, key) => {
-    if (key in obj) {
-      result[key] = obj[key];
-    }
-    return result;
-  }, {} as Pick<T, K>);
+export function sum(array: number[]): number {
+  return array.reduce((acc, val) => acc + val, 0);
 }
 
 /**
- * Omits specific properties from an object to create a new object
- * @param obj The source object
- * @param keys The keys to omit
- * @returns A new object without the specified properties
+ * Calculates the average of an array of numbers
+ * @param array Array of numbers
+ * @returns Average of the array
  */
-export function omit<T extends object, K extends keyof T>(
-  obj: T,
-  keys: K[]
-): Omit<T, K> {
-  const result = { ...obj };
-  keys.forEach((key) => delete result[key]);
-  return result;
+export function average(array: number[]): number {
+  if (array.length === 0) return 0;
+  return sum(array) / array.length;
 }

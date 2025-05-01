@@ -1,14 +1,12 @@
 "use client";
 
 import React, { ReactNode } from "react";
-
-// Import providers
+import { ThemeProvider } from "next-themes";
 import { QueryProvider } from "@/lib/query-client";
-import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/hooks/use-auth";
 
 interface ProvidersProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 /**
@@ -17,17 +15,12 @@ interface ProvidersProps {
  */
 export function Providers({ children }: ProvidersProps) {
   return (
-    <QueryProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <QueryProvider>
         <AuthProvider>
           {children}
         </AuthProvider>
-      </ThemeProvider>
-    </QueryProvider>
+      </QueryProvider>
+    </ThemeProvider>
   );
 }

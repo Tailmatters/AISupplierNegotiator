@@ -1,60 +1,48 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
-import { Providers } from '@/providers'
-import { Toaster } from '@/components/ui/toaster'
-import { cn } from '@/lib/utils'
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { Providers } from "@/providers";
+import { Toaster } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
 
-// Load Inter font
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-sans',
-})
+// Load the Inter font with Latin subset
+const inter = Inter({ subsets: ["latin"] });
 
-// Metadata for the application
 export const metadata: Metadata = {
-  title: 'AI Negotiator | Procurement Negotiation Platform',
-  description:
-    'AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions through intelligent contract management, advanced analytics, and collaborative tools.',
+  title: "AI Negotiator Platform",
+  description: "An AI-powered procurement negotiation platform that empowers businesses to optimize supplier interactions",
+  generator: "Next.js",
+  applicationName: "AI Negotiator",
   keywords: [
-    'procurement',
-    'negotiation',
-    'ai',
-    'artificial intelligence',
-    'supplier management',
-    'contract management',
-    'spend analysis',
-    'procurement analytics',
-    'supplier analytics',
-    'negotiation strategies',
+    "procurement", 
+    "negotiation", 
+    "AI", 
+    "supplier management", 
+    "contract management", 
+    "spend analysis"
   ],
-  authors: [{ name: 'AI Negotiator Team' }],
-  creator: 'AI Negotiator',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: '#09090b' },
-  ],
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
+  authors: [{ name: "AI Negotiator Team" }],
+  creator: "AI Negotiator Team",
+  publisher: "AI Negotiator",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
   },
-}
+};
 
-// Root layout component
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head />
       <body
         className={cn(
-          'min-h-screen bg-background font-sans antialiased',
-          inter.variable
+          "min-h-screen bg-background font-sans antialiased",
+          inter.className
         )}
       >
         <Providers>
@@ -65,5 +53,5 @@ export default function RootLayout({
         </Providers>
       </body>
     </html>
-  )
+  );
 }
