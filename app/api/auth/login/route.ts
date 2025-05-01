@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     const token = await createToken(user)
     
     // Set token as cookie
-    cookies().set({
+    const cookieStore = cookies()
+    cookieStore.set({
       name: "token",
       value: token,
       httpOnly: true,
