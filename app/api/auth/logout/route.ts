@@ -2,23 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { clearTokenCookie } from "@/lib/auth";
 
 /**
- * POST /api/auth/logout
- * Logs out the current user by clearing their session
+ * POST /api/auth/logout - Log out a user by clearing the auth token
  */
 export async function POST(request: NextRequest) {
   try {
-    // Clear the authentication cookie
-    clearTokenCookie();
+    // Clear the auth token cookie
+    await clearTokenCookie();
     
-    return NextResponse.json(
-      { success: true, message: "Logged out successfully" },
-      { status: 200 }
-    );
+    // Return success response
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Logout error:", error);
     
     return NextResponse.json(
-      { error: "Failed to logout" },
+      { error: "Logout failed" },
       { status: 500 }
     );
   }

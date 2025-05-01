@@ -2,86 +2,65 @@ import { NextRequest, NextResponse } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { db } from "@/lib/db";
 import { User, users } from "@/schema";
-import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
-import { randomBytes, scrypt, timingSafeEqual } from "crypto";
+import { cookies } from "next/headers";
+import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 
-// Constants for JWT handling
-const JWT_SECRET = process.env.SESSION_SECRET || "default-secret-key-change-in-production";
-const TOKEN_NAME = "auth_token";
-const TOKEN_EXPIRY = "24h";
-
-// Use promisify to convert callback-based functions to promise-based
+// Convert callback-based scrypt to Promise-based
 const scryptAsync = promisify(scrypt);
 
+// Auth constants
+const JWT_SECRET = process.env.SESSION_SECRET || "your-super-secret-key";
+const TOKEN_NAME = "auth-token";
+const TOKEN_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
+// Use TextEncoder to convert the secret to Uint8Array as required by jose
+const secretKey = new TextEncoder().encode(JWT_SECRET);
+
 /**
- * Hash a password using scrypt
- * @param password The plain text password to hash
- * @returns A string in the format "hash.salt"
+ * Hash a password with salt
  */
 export async function hashPassword(password: string): Promise<string> {
-  // Generate a random salt
   const salt = randomBytes(16).toString("hex");
-  
-  // Hash the password with the salt
-  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-  
-  // Return the hash and salt together
-  return `${derivedKey.toString("hex")}.${salt}`;
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${buf.toString("hex")}.${salt}`;
 }
 
 /**
- * Compare a plain text password with a stored hashed password
- * @param plainPassword The plain text password to verify
- * @param hashedPassword The stored hashed password (in "hash.salt" format)
- * @returns True if the password matches, false otherwise
+ * Compare a supplied password with a stored hashed password
  */
-export async function comparePasswords(
-  plainPassword: string,
-  hashedPassword: string
-): Promise<boolean> {
-  // Split the hash and salt
-  const [hash, salt] = hashedPassword.split(".");
-  
-  // Hash the plain password with the same salt
-  const derivedKey = (await scryptAsync(plainPassword, salt, 64)) as Buffer;
-  
-  // Compare the hashes in constant time (to prevent timing attacks)
-  return timingSafeEqual(
-    Buffer.from(hash, "hex"),
-    derivedKey
-  );
+export async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
+  const [hashed, salt] = stored.split(".");
+  const hashedBuf = Buffer.from(hashed, "hex");
+  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+  return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
 /**
  * Generate a JWT token for a user
- * @param user The user to generate a token for
- * @returns The JWT token
  */
 export async function generateToken(user: User): Promise<string> {
-  const { password, ...userPayload } = user;
+  const { password, ...userWithoutPassword } = user;
   
-  return new SignJWT(userPayload)
+  return new SignJWT({ ...userWithoutPassword })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(TOKEN_EXPIRY)
-    .sign(new TextEncoder().encode(JWT_SECRET));
+    .setExpirationTime("7d") // Token expires in 7 days
+    .sign(secretKey);
 }
 
 /**
- * Set the token cookie in the response
- * @param token The JWT token to set in the cookie
+ * Set the token in a cookie
  */
 export async function setTokenCookie(token: string): Promise<void> {
   cookies().set({
     name: TOKEN_NAME,
     value: token,
     httpOnly: true,
-    path: "/",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24, // 24 hours in seconds
-    sameSite: "lax",
+    maxAge: TOKEN_MAX_AGE,
+    path: "/",
   });
 }
 
@@ -93,71 +72,49 @@ export async function clearTokenCookie(): Promise<void> {
     name: TOKEN_NAME,
     value: "",
     httpOnly: true,
-    path: "/",
     secure: process.env.NODE_ENV === "production",
     maxAge: 0,
-    sameSite: "lax",
+    path: "/",
   });
 }
 
 /**
- * Verify a JWT token from the request
- * @param request The NextRequest object
- * @returns True if the token is valid, false otherwise
+ * Verify that a JWT token is valid
  */
-export async function verifyToken(request: NextRequest): Promise<boolean> {
+export async function verifyToken(req: NextRequest): Promise<boolean> {
+  const token = req.cookies.get(TOKEN_NAME)?.value;
+  
+  if (!token) return false;
+  
   try {
-    const token = request.cookies.get(TOKEN_NAME)?.value;
-    
-    if (!token) {
-      return false;
-    }
-    
-    // Verify the token
-    await jwtVerify(
-      token,
-      new TextEncoder().encode(JWT_SECRET)
-    );
-    
+    await jwtVerify(token, secretKey);
     return true;
   } catch (error) {
-    console.error("Token verification error:", error);
+    console.error("Token verification failed:", error);
     return false;
   }
 }
 
 /**
- * Get the user from the token in the request
- * @param request The NextRequest object
- * @returns The user if found and valid, null otherwise
+ * Get user object from token in request
  */
-export async function getUserFromToken(request: NextRequest): Promise<User | null> {
+export async function getUserFromToken(req: NextRequest): Promise<User | null> {
+  const token = req.cookies.get(TOKEN_NAME)?.value;
+  
+  if (!token) return null;
+  
   try {
-    const token = request.cookies.get(TOKEN_NAME)?.value;
+    const verified = await jwtVerify(token, secretKey);
+    const userId = verified.payload.id as number;
     
-    if (!token) {
-      return null;
-    }
-    
-    // Verify and decode the token
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(JWT_SECRET)
-    );
-    
-    if (!payload.id) {
-      return null;
-    }
-    
-    // Get the user from the database
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.id, payload.id as number));
+      .where(eq(users.id, userId));
     
     return user || null;
   } catch (error) {
-    console.error("Get user from token error:", error);
+    console.error("Error getting user from token:", error);
     return null;
   }
 }

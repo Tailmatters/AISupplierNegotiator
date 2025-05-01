@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { z } from "zod";
 import { comparePasswords, generateToken, setTokenCookie } from "@/lib/auth";
 import { loginSchema } from "@/schema";
 import { db } from "@/lib/db";
@@ -7,62 +7,48 @@ import { users } from "@/schema";
 import { eq } from "drizzle-orm";
 
 /**
- * POST /api/auth/login
- * Authenticates a user and creates a session
+ * POST /api/auth/login - Authenticate a user
  */
 export async function POST(request: NextRequest) {
   try {
-    // Parse and validate request body
+    // Parse and validate the request body
     const body = await request.json();
     const validatedData = loginSchema.parse(body);
 
-    // Find user by username
+    // Find the user by username
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.username, validatedData.username));
 
-    // Check if user exists
-    if (!user) {
+    // If no user found or password doesn't match
+    if (!user || !(await comparePasswords(validatedData.password, user.password))) {
       return NextResponse.json(
         { error: "Invalid username or password" },
         { status: 401 }
       );
     }
 
-    // Verify password
-    const passwordValid = await comparePasswords(
-      validatedData.password,
-      user.password
-    );
-
-    if (!passwordValid) {
-      return NextResponse.json(
-        { error: "Invalid username or password" },
-        { status: 401 }
-      );
-    }
-
-    // Generate authentication token
+    // Generate a token
     const token = await generateToken(user);
-    
-    // Set token in HTTP-only cookie
-    setTokenCookie(token);
 
-    // Return user data (without password)
+    // Set the token in a cookie
+    await setTokenCookie(token);
+
+    // Return the user without password
     const { password, ...userWithoutPassword } = user;
     return NextResponse.json(userWithoutPassword);
   } catch (error) {
     console.error("Login error:", error);
-
+    
     // Handle validation errors
-    if (error instanceof ZodError) {
+    if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Validation error", details: error.format() },
+        { error: "Invalid input", details: error.format() },
         { status: 400 }
       );
     }
-
+    
     return NextResponse.json(
       { error: "Authentication failed" },
       { status: 500 }
