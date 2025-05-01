@@ -1,62 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthToken, verifyToken } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { users } from '@/schema'
-import { eq } from 'drizzle-orm'
+import { getAuthUser } from '@/lib/auth'
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    // Get the auth token from cookies
-    const token = await getAuthToken(req.cookies)
+    // Get the authenticated user
+    const user = await getAuthUser(request)
     
-    // No token found, user is not authenticated
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      )
-    }
-    
-    // Verify the token
-    const payload = await verifyToken(token)
-    
-    // Token is invalid
-    if (!payload || !payload.userId) {
-      return NextResponse.json(
-        { error: 'Invalid authentication token' },
-        { status: 401 }
-      )
-    }
-    
-    // Get user from database
-    const [user] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        company: users.company,
-        position: users.position,
-        avatarUrl: users.avatarUrl,
-      })
-      .from(users)
-      .where(eq(users.id, payload.userId))
-    
-    // User not found
     if (!user) {
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+        { error: 'Authentication required' },
+        { status: 401 }
       )
     }
     
-    // Return user data
-    return NextResponse.json(user)
+    // Remove password from user data
+    const { password, ...userData } = user
+    
+    return NextResponse.json(userData, { status: 200 })
   } catch (error) {
-    console.error('Get user error:', error)
+    console.error('User fetch error:', error)
     return NextResponse.json(
-      { error: 'An error occurred while fetching user data' },
+      { error: 'Failed to fetch user', message: error.message },
       { status: 500 }
     )
   }
