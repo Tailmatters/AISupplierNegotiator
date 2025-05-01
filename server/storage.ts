@@ -1891,61 +1891,73 @@ export const storage = new DatabaseStorage();
 
 // Seed database with sample suppliers if needed
 async function seedSampleData() {
-  // Check if we already have suppliers
-  const existingSuppliers = await storage.getSuppliers();
-  
-  if (existingSuppliers.length === 0) {
-    console.log("Seeding database with sample suppliers...");
-    
-    // Sample suppliers
-    const sampleSuppliers: InsertSupplier[] = [
-      {
-        name: "Dell Technologies",
-        email: "contact@dell.com",
-        contactPerson: "John Miller",
-        category: "IT Hardware",
-        status: "active"
-      },
-      {
-        name: "Herman Miller",
-        email: "procurement@hermanmiller.com",
-        contactPerson: "Sarah Johnson",
-        category: "Office Furniture",
-        status: "active"
-      },
-      {
-        name: "DHL Express",
-        email: "business@dhl.com",
-        contactPerson: "Michael Torres",
-        category: "Logistics",
-        status: "active"
-      },
-      {
-        name: "AWS",
-        email: "enterprise@aws.com",
-        contactPerson: "Jason Wei",
-        category: "Cloud Services",
-        status: "active"
-      },
-      {
-        name: "Staples",
-        email: "b2b@staples.com",
-        contactPerson: "Melissa Chen",
-        category: "Office Supplies",
-        status: "inactive"
+  try {
+    // Use executeQuery to make this operation retry automatically if there are connection issues
+    await executeQuery(async () => {
+      // Check if we already have suppliers
+      const existingSuppliers = await storage.getSuppliers();
+      
+      if (existingSuppliers.length === 0) {
+        console.log("Seeding database with sample suppliers...");
+        
+        // Sample suppliers with categoryId instead of category string
+        const sampleSuppliers: InsertSupplier[] = [
+          {
+            name: "Dell Technologies",
+            email: "contact@dell.com",
+            contactPerson: "John Miller",
+            categoryId: 1, // IT Hardware
+            status: "active"
+          },
+          {
+            name: "Herman Miller",
+            email: "procurement@hermanmiller.com",
+            contactPerson: "Sarah Johnson",
+            categoryId: 2, // Office Furniture
+            status: "active"
+          },
+          {
+            name: "DHL Express",
+            email: "business@dhl.com",
+            contactPerson: "Michael Torres",
+            categoryId: 3, // Logistics
+            status: "active"
+          },
+          {
+            name: "AWS",
+            email: "enterprise@aws.com",
+            contactPerson: "Jason Wei",
+            categoryId: 4, // Cloud Services
+            status: "active"
+          },
+          {
+            name: "Staples",
+            email: "b2b@staples.com",
+            contactPerson: "Melissa Chen",
+            categoryId: 5, // Office Supplies
+            status: "inactive"
+          }
+        ];
+        
+        // Create suppliers with retry logic
+        for (const supplier of sampleSuppliers) {
+          try {
+            await storage.createSupplier(supplier);
+          } catch (supplierError) {
+            console.warn(`Error creating supplier ${supplier.name}:`, supplierError);
+            // Continue with other suppliers even if one fails
+          }
+        }
+        
+        console.log("Database seeded successfully!");
+      } else {
+        console.log("Database already contains suppliers, skipping seed.");
       }
-    ];
-    
-    // Create suppliers
-    for (const supplier of sampleSuppliers) {
-      await storage.createSupplier(supplier);
-    }
-    
-    console.log("Database seeded successfully!");
+    });
+  } catch (error) {
+    console.error("Error seeding database:", error);
   }
 }
 
 // Call seed function
-seedSampleData().catch(error => {
-  console.error("Error seeding database:", error);
-});
+seedSampleData();
